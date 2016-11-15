@@ -5,7 +5,7 @@ import binascii
 
 
 def create_packet(source_port, destination_port, sequence_num, ack_num, window, data_size, data, syn=False, ack=False, fin=False):
-	# I = int, 4 bytes
+	# I = unsigned int, 4 bytes
 	# H = unsigned short, 2 bytes
 	# ! = network byte order
 	HEADER_FORMAT = "!HHIIHHHHb"
