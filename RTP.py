@@ -8,7 +8,7 @@ def create_packet(source_port, destination_port, sequence_num, ack_num, window, 
 	# I = unsigned int, 4 bytes
 	# H = unsigned short, 2 bytes
 	# ! = network byte order
-	HEADER_FORMAT = "!HHIIHHHHb"
+	HEADER_FORMAT = "!HHIIHHHHI"
 	# Create reserved + special bits number
 	special_bits = 0
 	if fin:
