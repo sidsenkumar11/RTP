@@ -1,8 +1,14 @@
 import socket
-from struct import pack
+from struct import *
+import binascii
+
+
 
 def create_packet(source_port, destination_port, sequence_num, ack_num, window, data_size, data, syn=False, ack=False, fin=False):
-
+	# I = int, 4 bytes
+	# H = unsigned short, 2 bytes
+	# ! = network byte order
+	HEADER_FORMAT = "!HHIIHHHHb"
 	# Create reserved + special bits number
 	special_bits = 0
 	if fin:
@@ -13,10 +19,24 @@ def create_packet(source_port, destination_port, sequence_num, ack_num, window, 
 		special_bits = special_bits + int('100', 2)
 
 
-	y = pack('hhllhhhhX', source_port, destination_port, sequence_num, ack_num, special_bits, window, 0, data_size, data)
-	print(y)
+	# y = pack('hhllhhhhX', source_port, destination_port, sequence_num, ack_num, special_bits, window, 0, data_size, data)
+	y = pack(HEADER_FORMAT, source_port, destination_port, sequence_num, ack_num, special_bits, window, 0, data_size, data)
+	print ("Packed(in ascii): " + str(binascii.hexlify(y)))
+	
+	ret = ""
+	for bit in y: 
+		ret += str(hex(ord(bit))) + " "
+	print "Packed(in hex): " + ret
+	
+	unpack_packet(HEADER_FORMAT, y)
 
-create_packet(80, 20, 123, 456, 789, 12, 1001, syn = True)
+def unpack_packet(HEADER_FORMAT, packed_data):
+	print ("Unpacked:" + str(unpack(HEADER_FORMAT, packed_data)))
+
+
+create_packet(80, 20, 73, 456, 789, 6, 100, syn = True, ack = False, fin = False)
+# data size : byte format requires -128 <= number <= 127
+
 class Connection:
 	def __init__(self, info, client_socket):
 		self.info = info
