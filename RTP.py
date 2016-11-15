@@ -32,7 +32,7 @@ def create_packet(source_port, destination_port, sequence_num, ack_num, window, 
 
 def unpack_packet(HEADER_FORMAT, packed_data):
 	print ("Unpacked:" + str(unpack(HEADER_FORMAT, packed_data)))
-
+	# source_port, destination_port, sequence_num, ack_num, special_bits, window, data_size, data = unpack(HEADER_FORMAT, packed_data)
 
 create_packet(80, 20, 73, 456, 789, 6, 100, syn = True, ack = False, fin = False)
 # data size : byte format requires -128 <= number <= 127
