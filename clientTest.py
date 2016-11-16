@@ -14,6 +14,15 @@ def connect(IP, port):
 
 	print("Connection Successful to: " + IP + ":" + str(port))
 
+def bytes_from_file(filename, chunksize = 1024):
+	with open(filename, "rb") as f:
+		while True:
+			chunk = f.read(chunksize)
+			if chunk:
+				for b in chunk:
+					yield b
+			else:
+				break
 
 def send_file(filename):
 
@@ -31,6 +40,8 @@ def send_file(filename):
 	rtpClientSocket.sendall((len(fileBytes)).to_bytes(10, byteorder='big'))
 	# rtpClientSocket.sendall(fileBytes)
 	# rtpClientSocket.sendall(b"thisisatest")
+	for b in bytes_from_file(filename):
+		rtpClientSocket.sendall(b.to_bytes(1024, byteorder='big'))
 	print(filename + " has been sent")
 
 def get_file(filename):

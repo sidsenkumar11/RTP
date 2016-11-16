@@ -59,6 +59,11 @@ def receive_file(con):
 
 	print(filename)
 	print(int.from_bytes(filesize, byteorder='big'))
+
+	dataset = bytearray()
+	while len(dataset) != filesize:
+		dataset.append(int.from_bytes(con.recv(1024), byteorder='big'))
+
 	# file_data = get_file(con)
 	# send_file("filename")
 
