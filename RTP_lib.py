@@ -1,4 +1,3 @@
-import socket
 import binascii
 from struct import pack, unpack
 
@@ -66,60 +65,16 @@ def read_segment(buffer):
 
 	return (header[0], header[1], header[2], header[3], header[4], header[5], header[6], header[7], data)
 
-data_array = bytearray([])
-for i in range(0, 12):
-	data_array.append(i)
+if __name__ == '__main__':
 
-y = create_segment(source_port=80, destination_port=20, sequence_num=123, ack_num=456, window=789, data_size=12, data=bytearray(data_array), syn = True)
-print(read_segment(y))
+	# Testing segment creation and reading.
 
+	# Data array is simply list of 12 bytes containing 0...11
+	data_array = bytearray([])
+	for i in range(0, 12):
+		data_array.append(i)
 
-
-
-class Connection:
-	def __init__(self, info, client_socket):
-		self.info = info
-		self.client_socket = client_socket
-		self.client_socket.bind('', 13)
-
-		# Create SYN packet
-		create_packet()
-		print("Intialization stuff")
-
-	def RTP_Send(self):
-		print("RTP Send")
-
-	def close(self):
-		print("Closing")
-
-	def RTP_Recv(self):
-		print("Receiving data")
-
-class RTP:
-
-	def __init__(self):
-		print("RTP init")
-
-	def RTP_Connect(self, info):
-		self.info = info
-		self.client_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-
-		print("RTP Connect to: " + self.info[0] + ":" + str(self.info[1]))
-		return Connection(info, client_socket)
-
-	def RTP_Bind(self, info):
-		print("RTP Bind")
-
-
-	def RTP_Accept(self):
-		print("RTP Accept")
-
-
-
-
-
-# RTP_INSTANCE = RTP()
-# x = RTP_INSTANCE.RTP_Connect(("10.0.0.1", 80))
-# x.RTP_Send()
-# x.RTP_Recv()
-# x.close()
+	# Segment created,
+	segment = create_segment(source_port=80, destination_port=20, sequence_num=123, ack_num=456, window=789, data_size=12, data=bytearray(data_array), syn = True)
+	print("Created Segment: " + str(binascii.hexlify(segment)))
+	print("Parsed Segment : " + str(read_segment(segment)))
