@@ -1,21 +1,23 @@
+# FTA-server.py
+
 import RTP
 import sys
 
 
 isConnected = False
 
-UDPport = int(sys.argv[1])
+port = int(sys.argv[1])
 
 def initial(IPnum, portnum):
 	IP = IPnum
-	UDPport = portnum
+	port = portnum
 
 	global socket
 
-	socket = RTP.Connection()
+	socket = RTP.RTP()
 
-	socket.RTP_Bind(IP, UDPport)
-	socket.listen()
+	socket.RTP_Bind(('', port))
+	socket.listen(1)
 
 
 def waitForConnect():
@@ -23,12 +25,18 @@ def waitForConnect():
     if(con):
         waitForCommands()   
     else:    
-        con = socket.acceptRTPConnection(IP,UDPport)
+        con = socket.acceptRTPConnection(IP,port)
 
 def terminate():
 	sys.exit()
     raise Exception('terminate')
 
+def set_window(newSize):
+    # epdate window size
+    windowSize = newSize
+    socket.setMaxWindowSize(newSize)
+
+    print('New window size set')
 
 def prompt():
     #try:
@@ -38,11 +46,13 @@ def prompt():
     # Check for the type of command input by the user
     if command == 'terminate':
         terminate()
+    elif command == 'window':
+    	set_window(int(user_input.split(' ')[1]))
     else:
         print('That was not a valid command')
 
 
-initial(IP, UDPport)
+initial(IP, port)
 
 while True:
     waitForConnect()
