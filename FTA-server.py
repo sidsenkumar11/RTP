@@ -11,14 +11,14 @@ socket = RTP.RTP()
 
 IP = socket.get_IP
 
-def initial(IPnum, portnum):
+def connect(IPnum, portnum):
 	IP = IPnum
 	port = portnum
 	# Not using IP to bind yet
 	socket.RTP_Bind(('', port))
 	# socket.RTP_listen(1)
 	print ("Finished Initializing...")
-initial(IP, port)
+connect(IP, port)
 
 def send_file(filename):
 
@@ -85,8 +85,7 @@ def set_window(newSize):
 
 def prompt():
 	#try:
-	print('Enter some command for the FTA Server(terminate; window):')
-	command = input()
+	command = input('Enter some command for the FTA Server(terminate; window):')
 
 	# Check for the type of command input by the user
 	if command == 'terminate':

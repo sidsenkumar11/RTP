@@ -6,15 +6,12 @@ import sys
 IP = sys.argv[1]
 port = int(sys.argv[2])
 
+global socket
+socket = RTP.RTP()
+
 def connect(): 
-	global socket
-	socket = RTP.RTP()
 	try:
 		socket.RTP_Connect((IP,port))
-		socket.settimeout(2)
-	except socket.timeout:
-		print("Timeout Occured...quitting now")
-		sys.exit()
 	except:
 		print ("Could not connect to server...quitting now")
 		sys.exit()
@@ -62,7 +59,7 @@ def disconnect():
 	socket.close()
 
 	# Print a confirmation to the user
-	print('Disconnected....')
+	print('Disconnected...')
 
 
 
