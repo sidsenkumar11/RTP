@@ -90,7 +90,7 @@ def set_window(newSize):
 
 def prompt():
 	#try:
-	command = input('Enter some command for the FTA Server(terminate; window; none):')
+	command = input('Enter some command for the FTA Server - \n [terminate, window, none]: ')
 
 	# Check for the type of command input by the user
 	if (command == 'terminate'):
