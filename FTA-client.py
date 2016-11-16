@@ -1,21 +1,45 @@
+# FTA-client.py
+
 import RTP
 import sys
 
 IP = sys.argv[1]
-UPDport = int(sys.argv[2])
+port = int(sys.argv[2])
 
 def connect(): 
 	global socket
-	socket = RTP.Connection()
-	socket.connect((IP, UPDport))
-    socket.listen()
+	socket = RTP.RTP()
+    try:
+        socket.RTP_Connect((IP,port))
+        socket.settimeout(2)
+    except socket.timeout:
+        print("Timeout Occured...quitting now")
+        sys.exit()
+    except:
+        print ("Could not connect to server...quitting now")
+        sys.exit()
+
 	print("Connection Successful")
 
+
+def send_file(filename):
+
+    # Need to tell server we are going to send file to server
+    socket.RTP_Send(bytearray(filename, 'utf-8'))
+
+    # load file
+    fileBytes = open(command.split(' ')[i], 'rb').read()
+
+    # Send file to server
+    socket.RTP_Send(fileBytes)
+
+    print("File has been sent")
+
 def get_file(filename):
-	# Need to send file to server
+	# Need to tell server we are going to send file to server
 	socket.RTP_Send(bytearray(filename, 'utf-8'))
 
-	fileBytes = socket.RTP_Recv(value??)
+	fileBytes = socket.RTP_Recv(1024)
 
 	# Write file; wb = write and binary
 	file = open('new' + command.split(' ')[i], 'wb')
@@ -24,17 +48,6 @@ def get_file(filename):
 
 	print("File from server received")
 
-def send_file(filename):
-	# Need to send file to server
-	socket.RTP_Send(bytearray(filename, 'utf-8'))
-
-	# load file
-	fileBytes = open(command.split(' ')[i], 'rb').read()
-
-	# Send file to server
-	socket.RTP_Send(fileBytes)
-
-	print("File has been sent")
 
 def set_window(newSize):
     # epdate window size

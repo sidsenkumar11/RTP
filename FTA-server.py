@@ -26,7 +26,7 @@ def waitForConnect():
         con = socket.acceptRTPConnection(IP,UDPport)
 
 def terminate():
-	sys.exit(0)
+	sys.exit()
     raise Exception('terminate')
 
 
