@@ -21,38 +21,38 @@ def initial(IPnum, portnum):
 
 
 def waitForConnect():
-    global con
-    if(con):
-        waitForCommands()   
-    else:    
-        con = socket.acceptRTPConnection(IP,port)
+	global con
+	if(con):
+		waitForCommands()   
+	else:    
+		con = socket.acceptRTPConnection(IP,port)
 
 def terminate():
 	sys.exit()
-    raise Exception('terminate')
+	raise Exception('terminate')
 
 def set_window(newSize):
-    # epdate window size
-    windowSize = newSize
-    socket.setMaxWindowSize(newSize)
+	# epdate window size
+	windowSize = newSize
+	socket.setMaxWindowSize(newSize)
 
-    print('New window size set')
+	print('New window size set')
 
 def prompt():
-    #try:
-    print('Enter a command for the FTA Server:')
-    command = input()
+	#try:
+	print('Enter a command for the FTA Server:')
+	command = input()
 
-    # Check for the type of command input by the user
-    if command == 'terminate':
-        terminate()
-    elif command == 'window':
-    	set_window(int(user_input.split(' ')[1]))
-    else:
-        print('That was not a valid command')
+	# Check for the type of command input by the user
+	if command == 'terminate':
+		terminate()
+	elif command == 'window':
+		set_window(int(user_input.split(' ')[1]))
+	else:
+		print('That was not a valid command')
 
 
 initial(IP, port)
 
 while True:
-    waitForConnect()
+	waitForConnect()
