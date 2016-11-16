@@ -15,21 +15,20 @@ else:
 	port = 8080
 	IP = "128.61.12.27"
 
-
 # global socket
 # socket = RTP.RTP()
 rtpClientSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-
+isConnected = False
 
 def connect(): 
-	print("Got to connect.")
+	print("About to connect...")
 	try:
 		rtpClientSocket.connect((IP,port))
 	except:
 		print ("Could not connect to server...quitting now")
 		sys.exit()
 
-	print("Connection Successful to: " + IP)
+	print("Connection Successful to: " + IP + ":" + str(port))
 
 
 def send_file(filename):
@@ -42,7 +41,7 @@ def send_file(filename):
 
 	# # Send file to server
 	# socket.RTP_Send(fileBytes)
-	rtpClientSocket.sendall("thisisatest")
+	rtpClientSocket.sendall(b"thisisatest")
 	print("thisisatest has been sent")
 
 def get_file(filename):
@@ -59,45 +58,49 @@ def get_file(filename):
 		data = rtpClientSocket.recv(1024)
 	except:
 		print ("get_file could not recv")
+		data = 'N/A'
 
-	print ("get_file got data: " + data)
+	print ("get_file got data: " + str(data))
 
-# def set_window(newSize):
-# 	# epdate window size
-# 	windowSize = newSize
-# 	socket.setMaxWindowSize(newSize)
+def set_window(newSize):
+	# epdate window size
+	windowSize = newSize
+	# socket.setMaxWindowSize(newSize)
 
-# 	print('New window size set')
+	print('New window size set to: ' + str(newSize))
 
 
 def disconnect():
 	# Disconnect from the server
 	rtpClientSocket.close()
 
-	# Print a confirmation to the user
 	print('Disconnected...')
 
+def exit():
+	print ("Exiting...")
+	sys.exit()
 
-connect()
-send_file("temp")
-get_file("temp")
-disconnect()
-# while True:
-# 	user_input = input('Enter a command on FTA client:')
 
-# 	command = user_input.split(' ')[0]
-# 	if command == 'connect':
-# 		connect()
-# 	elif command == 'get':
-# 		get_file(user_input)
-# 	elif command == 'post':
-# 		send_file(user_input)
-# 	elif command == 'window':
-# 		set_window(int(user_input.split(' ')[1]))
-# 	elif command == 'disconnect':
-# 		disconnect()
-# 	elif command == 'exit':
-# 		print ("Disconnecting....")
-# 		sys.exit()
-# 	else:
-# 		print('That was not valid. Please enter a valid command')
+while True:
+	commandInput = input('Enter a command on FTA client - \n[connect, get, post, window, disconnect, exit]: ')
+
+	command = commandInput.split(' ')[0]
+	if command == 'connect':
+		connect()
+		isConnected = True
+	elif command == 'get' and isConnected:
+		get_file(commandInput)
+	elif command == 'post' and isConnected:
+		send_file(commandInput)
+	elif command == 'window' and isConnected:
+		s = input('Enter the new window size:')
+		set_window(s)
+	elif command == 'disconnect' and isConnected:
+		disconnect()
+		isConnected = False
+	elif command == 'exit':
+		exit()
+	elif not isConnected:
+		print ("Currently not connected. Please connect.")
+	else:
+		print('That was not valid. Please enter a valid command')
