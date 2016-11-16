@@ -1,14 +1,17 @@
 import socket
-from struct import *
 import binascii
+from struct import pack
 
+def checksum(bytearray):
+	checksum = 0
+	for byte in bytearray:
+		checksum = (checksum >> 1) + ((checksum & 1) << 15)
+		checksum += byte
+		checksum &= 0xffff
+	return checksum
 
+def create_segment(source_port, destination_port, sequence_num, ack_num, window, data_size, data, syn=False, ack=False, fin=False):
 
-def create_packet(source_port, destination_port, sequence_num, ack_num, window, data_size, data, syn=False, ack=False, fin=False):
-	# I = unsigned int, 4 bytes
-	# H = unsigned short, 2 bytes
-	# ! = network byte order
-	HEADER_FORMAT = "!HHIIHHHHI"
 	# Create reserved + special bits number
 	special_bits = 0
 	if fin:
@@ -18,24 +21,27 @@ def create_packet(source_port, destination_port, sequence_num, ack_num, window, 
 	if ack:
 		special_bits = special_bits + int('100', 2)
 
+	# Create initial segment with checksum of 0.
+	segment = pack("!HHLLHHHH", source_port, destination_port, sequence_num, ack_num, special_bits, window, 0, data_size)
+	segment = bytearray(segment)
+	segment = segment + data
+	checksum_data = bytearray([len(segment)]) + segment
 
-	# y = pack('hhllhhhhX', source_port, destination_port, sequence_num, ack_num, special_bits, window, 0, data_size, data)
-	y = pack(HEADER_FORMAT, source_port, destination_port, sequence_num, ack_num, special_bits, window, 0, data_size, data)
-	print ("Packed(in ascii): " + str(binascii.hexlify(y)))
-	
-	ret = ""
-	for bit in y: 
-		ret += str(hex(ord(bit))) + " "
-	print "Packed(in hex): " + ret
-	
-	unpack_packet(HEADER_FORMAT, y)
+	# Compute checksum on [Segment Length] + [Segment]
+	real_checksum = checksum(checksum_data)
 
-def unpack_packet(HEADER_FORMAT, packed_data):
-	print ("Unpacked:" + str(unpack(HEADER_FORMAT, packed_data)))
-	# source_port, destination_port, sequence_num, ack_num, special_bits, window, data_size, data = unpack(HEADER_FORMAT, packed_data)
+	# Segment = Segment with correct checksum + data
+	segment = pack("!HHLLHHHH", source_port, destination_port, sequence_num, ack_num, special_bits, window, real_checksum, data_size)
+	segment = segment + data
 
-create_packet(80, 20, 73, 456, 789, 6, 100, syn = True, ack = False, fin = False)
-# data size : byte format requires -128 <= number <= 127
+	return segment
+	# print(binascii.hexlify(segment))
+create_segment(source_port=80, destination_port=20, sequence_num=123, ack_num=456, window=789, data_size=12, data=bytearray([9, 11]), syn = True)
+
+
+
+
+
 
 class Connection:
 	def __init__(self, info, client_socket):
