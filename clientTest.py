@@ -4,23 +4,7 @@
 import sys
 import socket
 
-
-if (len(sys.argv) > 2):
-	IP = sys.argv[1]
-	port = int(sys.argv[2])
-	print("IP is: " + IP)
-	print("Port is: " + str(port))
-else:
-	print("Port and IP is not given. Auto set to 8080 and 128.61.12.27")
-	port = 8080
-	IP = "128.61.12.27"
-
-# global socket
-# socket = RTP.RTP()
-rtpClientSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-isConnected = False
-
-def connect(): 
+def connect(IP, port): 
 	print("About to connect...")
 	try:
 		rtpClientSocket.connect((IP,port))
@@ -38,12 +22,14 @@ def send_file(filename):
 	rtpClientSocket.sendall(bytearray(filename, 'utf8'))
 	# # load file
 	
-	fileBytes = open(filename.split(' ')[0], 'rb').read()
+	fileBytes = open(filename, 'rb').read()
 
 	# # Send file to server
 	# socket.RTP_Send(fileBytes)
-	print(str(fileBytes))
-	rtpClientSocket.sendall(fileBytes)
+	# print(str(fileBytes))
+	print(len(fileBytes))
+	rtpClientSocket.sendall((len(fileBytes)).to_bytes(10, byteorder='big'))
+	# rtpClientSocket.sendall(fileBytes)
 	# rtpClientSocket.sendall(b"thisisatest")
 	print(filename + " has been sent")
 
@@ -84,12 +70,28 @@ def exit():
 	sys.exit()
 
 
+if (len(sys.argv) > 2):
+	IP = sys.argv[1]
+	port = int(sys.argv[2])
+	print("IP is: " + IP)
+	print("Port is: " + str(port))
+else:
+	print("Port and IP is not given. Auto set to 8080 and 128.61.12.27")
+	port = 8080
+	IP = "128.61.12.27"
+
+# global socket
+# socket = RTP.RTP()
+rtpClientSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+isConnected = False
+
+
 while True:
 	commandInput = input('Enter a command on FTA client - \n[connect, get, post, window, disconnect, exit]: ')
 
 	command = commandInput.split(' ')[0]
 	if command == 'connect':
-		connect()
+		connect(IP, port)
 		isConnected = True
 	elif command == 'get' and isConnected:
 		fileG = input('Enter the file name you want to get: ')
