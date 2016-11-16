@@ -35,14 +35,17 @@ def send_file(filename):
 
 	# # Need to tell server we are going to send file to server
 	# socket.RTP_Send(bytearray(filename, 'utf-8'))
-
+	rtpClientSocket.sendall(bytearray(filename, 'utf8'))
 	# # load file
-	# fileBytes = open(command.split(' ')[i], 'rb').read()
+	
+	fileBytes = open(filename.split(' ')[0], 'rb').read()
 
 	# # Send file to server
 	# socket.RTP_Send(fileBytes)
-	rtpClientSocket.sendall(b"thisisatest")
-	print("thisisatest has been sent")
+	print(str(fileBytes))
+	rtpClientSocket.sendall(fileBytes)
+	# rtpClientSocket.sendall(b"thisisatest")
+	print(filename + " has been sent")
 
 def get_file(filename):
 	# # Need to tell server we are going to send file to server
@@ -89,9 +92,11 @@ while True:
 		connect()
 		isConnected = True
 	elif command == 'get' and isConnected:
-		get_file(commandInput)
+		fileG = input('Enter the file name you want to get: ')
+		get_file(fileG)
 	elif command == 'post' and isConnected:
-		send_file(commandInput)
+		fileP = input('Enter the file name you want to post: ')
+		send_file(fileP)
 	elif command == 'window' and isConnected:
 		s = input('Enter the new window size:')
 		set_window(s)

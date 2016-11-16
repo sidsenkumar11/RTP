@@ -29,7 +29,7 @@ def send_file(filename):
 	con.send(b'madeit')
 	print("File has been sent by server")
 
-def get_file(filename):
+def get_file():
 # 	# Need to tell server we are going to send file to server
 # 	socket.RTP_Send(bytearray(filename, 'utf-8'))
 
@@ -40,16 +40,25 @@ def get_file(filename):
 # 	file.write(fileBytes)
 	
 # 	# Get file from server
-	command = con.recv(1024)
-	print (command)
+	data = con.recv(2048)
+	# filename = data.decode('utf8').split(' ')[0]
+	# file = open('new' + filename, 'wb')
+	# file.write(data)
+	print (data)
 	print("File from server received")
+
+def get_file_size():
+	size = con.recv(2048)
+	print (str(size))
+	print("Size of file from server received")
 
 
 def wait():
 	print("entering wait")
 	while 1:
 		# Get the command from the client
-		get_file("filename")
+		filename = get_file()
+		filesize = get_file_size()
 
 		# # Check to see what the command is
 		# if command is None:
@@ -79,6 +88,7 @@ def closeConnection():
 	con.close()
 
 def exit():
+	con.close()
 	sys.exit()
 
 def set_window(newSize):
