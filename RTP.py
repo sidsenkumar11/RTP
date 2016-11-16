@@ -1,7 +1,8 @@
 import socket
 import binascii
-from struct import pack
+from struct import pack, unpack
 
+# Computes the 16-bit BSD checksum on a byte array.
 def checksum(bytearray):
 	checksum = 0
 	for byte in bytearray:
@@ -10,6 +11,7 @@ def checksum(bytearray):
 		checksum &= 0xffff
 	return checksum
 
+# Data must be a bytearray.
 def create_segment(source_port, destination_port, sequence_num, ack_num, window, data_size, data, syn=False, ack=False, fin=False):
 
 	# Create reserved + special bits number
@@ -34,11 +36,42 @@ def create_segment(source_port, destination_port, sequence_num, ack_num, window,
 	segment = pack("!HHLLHHHH", source_port, destination_port, sequence_num, ack_num, special_bits, window, real_checksum, data_size)
 	segment = segment + data
 
+	# print("Segment Contents: " + str(binascii.hexlify(segment)))
+	# print("Real checksum   : " + str(real_checksum))
 	return segment
-	# print(binascii.hexlify(segment))
-create_segment(source_port=80, destination_port=20, sequence_num=123, ack_num=456, window=789, data_size=12, data=bytearray([9, 11]), syn = True)
 
+# Parses a bytearray segment from data buffer.
+def read_segment(buffer):
 
+	# Get segment from buffer
+	data_length = int.from_bytes(buffer[18:20], byteorder='big')
+	segment = buffer[:20 + data_length]
+
+	# Parse fields
+	header = unpack("!HHLLHHHH", segment[:20])
+	data = segment[20:]
+
+	# Check checksum
+	desired_checksum = header[6]
+	orig_segment = pack("!HHLLHHHH", header[0], header[1], header[2], header[3], header[4], header[5], 0, header[7])
+	orig_segment = bytearray(orig_segment)
+	orig_segment = orig_segment + data
+	orig_checksum_data = bytearray([len(orig_segment)]) + orig_segment
+	real_checksum = checksum(orig_checksum_data)
+
+	if desired_checksum != real_checksum:
+		print("Transmission error")
+	else:
+		print("Checksum matches!")
+
+	return (header[0], header[1], header[2], header[3], header[4], header[5], header[6], header[7], data)
+
+data_array = bytearray([])
+for i in range(0, 12):
+	data_array.append(i)
+
+y = create_segment(source_port=80, destination_port=20, sequence_num=123, ack_num=456, window=789, data_size=12, data=bytearray(data_array), syn = True)
+print(read_segment(y))
 
 
 
