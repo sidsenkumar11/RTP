@@ -3,8 +3,7 @@
 # import RTP
 import sys
 import socket
-
-
+import os
 
 def initialize(IPnum, portnum):
 	IP = IPnum
@@ -28,21 +27,7 @@ def prompt():
 		set_window(s)
 	elif (command == 'none'):
 		print("No command entered.")
-	# # Check to see what the command is
-	# if command is None:
-	# 	global con
-	# 	con = False      
-	# elif command.decode('utf-8').split(' ')[0] == 'get':
-	# 	# send_file(command)
-	# 	print ("Got a get command")
-	# 	con.send('Got get')
-	# elif command.decode('utf-8').split(' ')[0] == 'post':
-	# 	# get_file(command)
-	# 	print ("Got a post command")
-	# 	con.send('Got post')
-	# else:
-	# 	print("Invalid command received")
-	# 	con.send('Got none')
+
 	print('Waiting for new connection.')
 
 def wait_and_receive_file():
@@ -55,32 +40,33 @@ def receive_file(con):
 	print("entering receive_file")
 
 	filename = con.recv(1024)
-	filesize = con.recv(30)
+	command = con.recv(1024)
+	if (str(command) == str(b'get')):
+		print("Switching to get function!")
+		send_file(filename, con)
+	else:
+		filesize = con.recv(30)
+		print(filename)
+		intBytes = int.from_bytes(filesize, byteorder='little')
+		print(intBytes)
+		# print(filesize)
+		dataset = bytearray()
+		print("Finished Creating a dataset array... ")
+		# print (dataset)
 
-	print(filename)
-	intBytes = int.from_bytes(filesize, byteorder='little')
-	print(intBytes)
-	# print(filesize)
-	dataset = bytearray()
-	print("Finidhsed Creating a dataset array... ")
-	# print (dataset)
-
-	run = True
-	while run:
-		rcvData = con.recv(1024)
-		if (rcvData != b"FAIL"):
-			dataset.append(int.from_bytes(rcvData, byteorder='little'))
-			print("Adding to dataset...")
-		else:
-			print("Nothing else left to add to dataset... exiting")
-			run = False
+		run = True
+		while run:
+			rcvData = con.recv(1024)
+			if (rcvData != b"FAIL"):
+				dataset.append(int.from_bytes(rcvData, byteorder='little'))
+				# print("Adding to dataset...")
+			else:
+				print("Nothing else left to add to dataset... exiting")
+				run = False
 		
-	print (dataset)
-	print("Exiting receive_file function....")
-
-	write_file(filename, dataset,con)
-	# file_data = get_file(con)
-	# send_file("filename")
+		print (dataset)
+		write_file(filename, dataset,con)
+		print("File uplaoded to server....")
 
 def write_file(filename, dataset, con):
 
@@ -90,21 +76,34 @@ def write_file(filename, dataset, con):
 	print("Finished creating a new file...About to write")
 	file.write(dataset)
 	
-
 	print("File written on server successfully")
 
-def send_file(filename):
+def bytes_from_file(filename, chunksize = 1024):
+	with open(filename, "rb") as f:
+		while True:
+			chunk = f.read(chunksize)
+			if chunk:
+				for b in chunk:
+					yield b
+			else:
+				yield -1
+				break
+def send_file(filename, con):
 
-# 	# Need to tell server we are going to send file to server
-# 	socket.RTP_Send(bytearray(filename, 'utf-8'))
-
-# 	# load file
-# 	fileBytes = open(command.split(' ')[i], 'rb').read()
-
-# 	# Send file to server
-# 	socket.RTP_Send(fileBytes)
-	con.send(b'madeit')
-	print("File has been sent by server")
+	if(os.path.exists(filename)):
+		con.sendall(bytearray("pass",'utf8'))
+		print("File has been found on server")
+		fileBytes = open(filename, 'rb').read()
+		con.sendall((len(fileBytes)).to_bytes(30, byteorder='little'))
+		for b in bytes_from_file(filename):
+			if(b != -1):
+				con.sendall(b.to_bytes(1024, byteorder='little'))
+			else:
+				con.sendall(b"FAIL")
+		print("File has been sent to the client.")	
+	else:
+		con.sendall(bytearray("didNotPass",'utf8'))
+		print("File was not found on the server")
 
 def set_window(newSize):
 	# epdate window size

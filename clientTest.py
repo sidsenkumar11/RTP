@@ -31,7 +31,8 @@ def send_file(filename):
 	# socket.RTP_Send(bytearray(filename, 'utf-8'))
 	rtpClientSocket.sendall(bytearray(filename, 'utf8'))
 	# # load file
-	
+	rtpClientSocket.sendall(bytearray("post",'utf8'))
+
 	fileBytes = open(filename, 'rb').read()
 
 	# # Send file to server
@@ -48,23 +49,31 @@ def send_file(filename):
 			rtpClientSocket.sendall(b"FAIL")	
 	print(filename + " has been sent")
 
-def get_file(filename):
-	# # Need to tell server we are going to send file to server
-	# socket.RTP_Send(bytearray(filename, 'utf-8'))
-
-	# fileBytes = socket.RTP_Recv(1024)
-
-	# # Write file; wb = write and binary
-	# file = open('new' + command.split(' ')[i], 'wb')
-	# file.write(fileBytes)
-	# # Get file from server
-	try:
-		data = rtpClientSocket.recv(1024)
-	except:
-		print ("get_file could not recv")
-		data = 'N/A'
-
-	print ("get_file got data: " + str(data))
+def receive_file(filename):
+	rtpClientSocket.sendall(bytearray(filename, 'utf8'))
+	# # load file
+	rtpClientSocket.sendall(bytearray("get",'utf8'))
+	didPass  = rtpClientSocket.recv(1024)
+	if(str(didPass) == str(b'pass')):
+		filesize = rtpClientSocket.recv(30)
+		intBytes = int.from_bytes(filesize, byteorder='little')
+		
+		dataset = bytearray()
+		print("Finished Creating a dataset array... ")
+		run = True
+		while run:
+			rcvData = rtpClientSocket.recv(1024)
+			if (rcvData != b"FAIL"):
+				dataset.append(int.from_bytes(rcvData, byteorder='little'))
+				# print("Adding to dataset...")
+			else:
+				print("Nothing else left to add to dataset... exiting")
+				run = False
+		print(dataset)
+		print("Finished getting a file...")
+	else:
+		print("No File Found on Server")
+	
 
 def set_window(newSize):
 	# epdate window size
@@ -110,7 +119,7 @@ while True:
 		isConnected = True
 	elif command == 'get' and isConnected:
 		fileG = input('Enter the file name you want to get: ')
-		get_file(fileG)
+		receive_file(fileG)
 	elif command == 'post' and isConnected:
 		fileP = input('Enter the file name you want to post: ')
 		send_file(fileP)
