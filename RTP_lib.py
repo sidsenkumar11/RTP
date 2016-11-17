@@ -1,4 +1,5 @@
 import binascii
+import socket
 from struct import pack, unpack
 
 # Computes the 16-bit BSD checksum on a byte array.
@@ -59,11 +60,17 @@ def read_segment(buffer):
 	real_checksum = checksum(orig_checksum_data)
 
 	if desired_checksum != real_checksum:
-		print("Transmission error")
+		# print("Transmission error")
+		return None
 	else:
-		print("Checksum matches!")
+		pass
+		# print("Checksum matches!")
 
 	return (header[0], header[1], header[2], header[3], header[4], header[5], header[6], header[7], data)
+
+# Returns this machine's IP address.
+def get_IP():
+	return socket.gethostbyname(socket.gethostname())
 
 if __name__ == '__main__':
 
