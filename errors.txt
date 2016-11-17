@@ -1,0 +1,4 @@
+1) broken pipe occurs when you do the following
+	get a file (not yet posted)
+	post that file now.
+

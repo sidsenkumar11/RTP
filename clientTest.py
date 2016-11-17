@@ -3,6 +3,7 @@
 # import RTP
 import sys
 import socket
+import os
 
 def connect(IP, port): 
 	print("About to connect...")
@@ -10,7 +11,6 @@ def connect(IP, port):
 		rtpClientSocket.connect((IP,port))
 	except:
 		print ("Could not connect to server...quitting now")
-		sys.exit()
 
 	print("Connection Successful to: " + IP + ":" + str(port))
 
@@ -26,28 +26,30 @@ def bytes_from_file(filename, chunksize = 1024):
 				break
 
 def send_file(filename):
+	if(os.path.exists(filename)):
+		# # Need to tell server we are going to send file to server
+		# socket.RTP_Send(bytearray(filename, 'utf-8'))
+		rtpClientSocket.sendall(bytearray(filename, 'utf8'))
+		# # load file
+		rtpClientSocket.sendall(bytearray("post",'utf8'))
 
-	# # Need to tell server we are going to send file to server
-	# socket.RTP_Send(bytearray(filename, 'utf-8'))
-	rtpClientSocket.sendall(bytearray(filename, 'utf8'))
-	# # load file
-	rtpClientSocket.sendall(bytearray("post",'utf8'))
+		fileBytes = open(filename, 'rb').read()
 
-	fileBytes = open(filename, 'rb').read()
-
-	# # Send file to server
-	# socket.RTP_Send(fileBytes)
-	# print(str(fileBytes))
-	print(len(fileBytes))
-	rtpClientSocket.sendall((len(fileBytes)).to_bytes(30, byteorder='little'))
-	# rtpClientSocket.sendall(fileBytes)
-	# rtpClientSocket.sendall(b"thisisatest")
-	for b in bytes_from_file(filename):
-		if(b != -1):
-			rtpClientSocket.sendall(b.to_bytes(1024, byteorder='little'))
-		else:
-			rtpClientSocket.sendall(b"FAIL")	
-	print(filename + " has been sent")
+		# # Send file to server
+		# socket.RTP_Send(fileBytes)
+		# print(str(fileBytes))
+		print(len(fileBytes))
+		rtpClientSocket.sendall((len(fileBytes)).to_bytes(30, byteorder='little'))
+		# rtpClientSocket.sendall(fileBytes)
+		# rtpClientSocket.sendall(b"thisisatest")
+		for b in bytes_from_file(filename):
+			if(b != -1):
+				rtpClientSocket.sendall(b.to_bytes(1024, byteorder='little'))
+			else:
+				rtpClientSocket.sendall(b"FAIL")	
+		print(filename + " has been sent")
+	else:
+		print("Sorry, client can't find that file.")
 
 def receive_file(filename):
 	rtpClientSocket.sendall(bytearray(filename, 'utf8'))

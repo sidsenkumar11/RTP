@@ -72,7 +72,7 @@ def write_file(filename, dataset, con):
 
 	print("Entering write_file function on server")
 # 	# Write file; wb = write and binary
-	file = open('new_' + str(filename.decode('utf8')), 'wb')
+	file = open('new' + str(filename.decode('utf8')), 'wb')
 	print("Finished creating a new file...About to write")
 	file.write(dataset)
 	
@@ -118,7 +118,6 @@ def closeConnection(con):
 def exit():
 	rtpServerSocket.close()
 	sys.exit()
-
 
 
 if (len(sys.argv) > 1):
