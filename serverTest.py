@@ -78,27 +78,20 @@ def receive_file(con):
 	print (dataset)
 	print("Exiting receive_file function....")
 
-	get_file(dataset)
+	write_file(filename, dataset,con)
 	# file_data = get_file(con)
 	# send_file("filename")
 
-def get_file(info, con):
-# 	# Need to tell server we are going to send file to server
-# 	socket.RTP_Send(bytearray(filename, 'utf-8'))
+def write_file(filename, dataset, con):
 
-# 	fileBytes = socket.RTP_Recv(1024)
-
+	print("Entering write_file function on server")
 # 	# Write file; wb = write and binary
-# 	file = open('new' + command.split(' ')[i], 'wb')
-# 	file.write(fileBytes)
+	file = open('new_' + str(filename.decode('utf8')), 'wb')
+	print("Finished creating a new file...About to write")
+	file.write(dataset)
 	
-# 	# Get file from server
-	data = con.recv(2048)
-	# filename = data.decode('utf8').split(' ')[0]
-	# file = open('new' + filename, 'wb')
-	# file.write(data)
-	print (data)
-	print("File from server received")
+
+	print("File written on server successfully")
 
 def send_file(filename):
 
