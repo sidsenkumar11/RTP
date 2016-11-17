@@ -1,0 +1,4 @@
+The RTP Header includes a source/destination port.
+However, RTP does no multiplexing of source/destination ports as this is taken care of at the OS level, so currently this part of the header is meaningless.
+
+For now, default source_port is 1111
