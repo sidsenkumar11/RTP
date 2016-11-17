@@ -22,6 +22,7 @@ def bytes_from_file(filename, chunksize = 1024):
 				for b in chunk:
 					yield b
 			else:
+				yield -1
 				break
 
 def send_file(filename):
@@ -37,11 +38,14 @@ def send_file(filename):
 	# socket.RTP_Send(fileBytes)
 	# print(str(fileBytes))
 	print(len(fileBytes))
-	rtpClientSocket.sendall((len(fileBytes)).to_bytes(10, byteorder='big'))
+	rtpClientSocket.sendall((len(fileBytes)).to_bytes(30, byteorder='little'))
 	# rtpClientSocket.sendall(fileBytes)
 	# rtpClientSocket.sendall(b"thisisatest")
 	for b in bytes_from_file(filename):
-		rtpClientSocket.sendall(b.to_bytes(1024, byteorder='big'))
+		if(b != -1):
+			rtpClientSocket.sendall(b.to_bytes(1024, byteorder='little'))
+		else:
+			rtpClientSocket.sendall(b"FAIL")	
 	print(filename + " has been sent")
 
 def get_file(filename):

@@ -54,36 +54,44 @@ def wait_and_receive_file():
 def receive_file(con):
 	print("entering receive_file")
 
-	filename = con.recv(2048)
-	filesize = con.recv(2048)
+	filename = con.recv(1024)
+	filesize = con.recv(30)
 
 	print(filename)
-	print(int.from_bytes(filesize, byteorder='big'))
+	intBytes = int.from_bytes(filesize, byteorder='little')
+	print(intBytes)
+	# print(filesize)
+	dataset = bytearray()
+	print("Finidhsed Creating a dataset array... ")
+	# print (dataset)
 
-	dataset = []
-	while len(dataset) != filesize:
-		dataset.append(con.recv(2048))
+	run = True
+	while run:
+		rcvData = con.recv(1024)
+		if (rcvData != b"FAIL"):
+			dataset.append(int.from_bytes(rcvData, byteorder='little'))
+			print("Adding to dataset...")
+		else:
+			print("Nothing else left to add to dataset... exiting")
+			run = False
+		
+	print (dataset)
+	print("Exiting receive_file function....")
 
+	write_file(filename, dataset,con)
 	# file_data = get_file(con)
 	# send_file("filename")
 
-def get_file(con):
-# 	# Need to tell server we are going to send file to server
-# 	socket.RTP_Send(bytearray(filename, 'utf-8'))
+def write_file(filename, dataset, con):
 
-# 	fileBytes = socket.RTP_Recv(1024)
-
+	print("Entering write_file function on server")
 # 	# Write file; wb = write and binary
-# 	file = open('new' + command.split(' ')[i], 'wb')
-# 	file.write(fileBytes)
+	file = open('new_' + str(filename.decode('utf8')), 'wb')
+	print("Finished creating a new file...About to write")
+	file.write(dataset)
 	
-# 	# Get file from server
-	data = con.recv(2048)
-	# filename = data.decode('utf8').split(' ')[0]
-	# file = open('new' + filename, 'wb')
-	# file.write(data)
-	print (data)
-	print("File from server received")
+
+	print("File written on server successfully")
 
 def send_file(filename):
 
