@@ -1,3 +1,4 @@
+import threading
 import socket
 from rtp_lib import *
 
@@ -170,8 +171,29 @@ class rtp_socket:
 			print("ACK sent. Connection established!")
 
 	def sendall(self, data):
-		pass
+
 		# Sends data through connection
+	    send_thread = threading.Thread(target=send_data, args = (data))
+	    # ack_thread = threading.Thread(target=receive_ack, args = ())
+
+	    send_thread.daemon = True
+	    send_thread.start()
+	    send_thread.join()
+
+	    print("Finished inserting data into sendbuffer")
+	    # ack_thread.daemon = True
+	    # ack_thread.start()
+
+	def send_data(self, data):
+		data = bytearray(data)
+		num_bytes = len(data)
+
+		for i in range(0, len(data)):
+			send_buffer[i] = data[i]
+
+	def receive_ack(self, data):
+		pass
+		
 
 	def recv(self, BUFFER_SIZE):
 		pass

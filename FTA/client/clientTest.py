@@ -29,10 +29,8 @@ def send_file(filename):
 	if(os.path.exists(filename)):
 		# # Need to tell server we are going to send file to server
 		# socket.RTP_Send(bytearray(filename, 'utf-8'))
-		rtpClientSocket.sendall(bytearray(filename, 'utf8'))
+		rtpClientSocket.sendall(bytearray("post " + str(filename),'utf8'))
 		# # load file
-		rtpClientSocket.sendall(bytearray("post",'utf8'))
-
 		fileBytes = open(filename, 'rb').read()
 
 		# # Send file to server
@@ -52,9 +50,9 @@ def send_file(filename):
 		print("Sorry, client can't find that file.")
 
 def receive_file(filename):
-	rtpClientSocket.sendall(bytearray(filename, 'utf8'))
 	# # load file
-	rtpClientSocket.sendall(bytearray("get",'utf8'))
+	rtpClientSocket.sendall(bytearray("get " + str(filename),'utf8'))
+
 	didPass  = rtpClientSocket.recv(1024)
 	if(str(didPass) == str(b'pass')):
 		filesize = rtpClientSocket.recv(30)
@@ -87,12 +85,14 @@ def set_window(newSize):
 
 def disconnect():
 	# Disconnect from the server
+	rtpClientSocket.sendall(bytearray("disconnect", 'utf-8'))
 	rtpClientSocket.close()
 
 	print('Disconnected...')
 
 def exit():
 	print ("Exiting...")
+	disconnect()
 	sys.exit()
 
 

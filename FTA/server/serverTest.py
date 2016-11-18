@@ -33,18 +33,31 @@ def prompt():
 def wait_and_receive_file():
 	print("Came to wait_and_receive_file in server")
 	con, addr = rtpServerSocket.accept()
-	receive_file(con)
-	closeConnection(con)
+
+	finished = False
+	while not finished:
+		finished = receive_file(con)
+	# closeConnection(con)
 
 def receive_file(con):
 	print("entering receive_file")
 
-	filename = con.recv(1024)
 	command = con.recv(1024)
-	if (str(command) == str(b'get')):
+	command = command.decode('utf-8')
+
+	if command != "disconnect":
+		command = command.split(' ')
+		filename = command[1]
+		command = command[0]
+
+	# print("filename is: " + str(filename))
+	# print("command is: " + str(command))
+
+	if (str(command) == "get"):
 		print("Switching to get function!")
 		send_file(filename, con)
-	else:
+		return False
+	elif (command == "post"):
 		filesize = con.recv(30)
 		print(filename)
 		intBytes = int.from_bytes(filesize, byteorder='little')
@@ -65,18 +78,23 @@ def receive_file(con):
 				run = False
 		
 		print (dataset)
-		write_file(filename, dataset,con)
+		write_file(filename, dataset)
 		print("File uplaoded to server....")
+		return False
+	elif (command == "disconnect"):
+		closeConnection(con)
+		return True
 
-def write_file(filename, dataset, con):
+def write_file(filename, dataset):
 
 	print("Entering write_file function on server")
 # 	# Write file; wb = write and binary
-	file = open('new' + str(filename.decode('utf8')), 'wb')
-	print("Finished creating a new file...About to write")
-	file.write(dataset)
-	
-	print("File written on server successfully")
+
+	with open('new' + filename, 'wb') as out:
+		print("Finished creating a new file")
+		out.write(dataset)
+		print("File written on server successfully")
+
 
 def bytes_from_file(filename, chunksize = 1024):
 	with open(filename, "rb") as f:
@@ -88,12 +106,16 @@ def bytes_from_file(filename, chunksize = 1024):
 			else:
 				yield -1
 				break
+
 def send_file(filename, con):
 
 	if(os.path.exists(filename)):
 		con.sendall(bytearray("pass",'utf8'))
 		print("File has been found on server")
-		fileBytes = open(filename, 'rb').read()
+
+		with open(filename, 'rb') as f:
+			fileBytes = f.read()
+
 		con.sendall((len(fileBytes)).to_bytes(30, byteorder='little'))
 		for b in bytes_from_file(filename):
 			if(b != -1):
@@ -107,7 +129,7 @@ def send_file(filename, con):
 
 def set_window(newSize):
 	# epdate window size
-	windowSize = int(newSize)
+	pass
 	# socket.setMaxWindowSize(newSize)
 
 	print('New window size set to: ' + str(newSize))
