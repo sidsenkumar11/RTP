@@ -101,8 +101,7 @@ def bytes_from_file(filename, chunksize = 1024):
 		while True:
 			chunk = f.read(chunksize)
 			if chunk:
-				for b in chunk:
-					yield b
+				yield chunk
 			else:
 				yield -1
 				break
@@ -119,9 +118,9 @@ def send_file(filename, con):
 		con.sendall((len(fileBytes)).to_bytes(30, byteorder='little'))
 		for b in bytes_from_file(filename):
 			if(b != -1):
-				con.sendall(b.to_bytes(1024, byteorder='little'))
+				con.send(b)
 			else:
-				con.sendall(b"FAIL")
+				pass
 		print("File has been sent to the client.")	
 	else:
 		con.sendall(bytearray("didNotPass",'utf8'))
