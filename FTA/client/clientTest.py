@@ -15,6 +15,48 @@ def connect(IP, port):
 
 	print("Connection Successful to: " + IP + ":" + str(port))
 
+def receive_file(filename):
+	# # load file
+	rtpClientSocket.sendall(bytearray("get " + str(filename),'utf8'))
+
+	didPass  = rtpClientSocket.recv(1024)
+	if(str(didPass) == str(b'pass')):
+		filesize = rtpClientSocket.recv(30)
+		intBytes = int.from_bytes(filesize, byteorder='little')
+		
+		dataset = bytearray()
+		print("Finished Creating a dataset array... ")
+		i = 0
+		while i < intBytes:
+			rcvData = rtpClientSocket.recv(1024)
+			t = bytearray(rcvData)
+			dataset.extend(t)
+			i = i + len(rcvData)
+
+		print("Nothing else left to add to dataset... exiting")
+		write_file(filename, dataset)
+		print("Finished getting a file from server.")
+	else:
+		print("No File Found on Server")
+
+def write_file(filename, dataset):
+
+	if(os.path.exists(filename)):
+		check = input('This file already exists, do you want to overwrite it? [y,n] ')
+		if (check == 'y'):
+			print("Okay. Going to overwrite the file.")
+			print("Entering write_file function on server")
+
+			with open(filename, 'wb') as out:
+				print("Finished creating a new file")
+				out.write(dataset)
+				print("File written on server successfully")
+		elif(check == 'n'):
+			print("Okay. Will not overwrite the file.")
+		else:
+			print("Invalid input. Did not overwrite the file.")
+
+
 def bytes_from_file(filename, chunksize = 1024):
 	with open(filename, "rb") as f:
 		while True:
@@ -31,62 +73,33 @@ def send_file(filename):
 		# socket.RTP_Send(bytearray(filename, 'utf-8'))
 		rtpClientSocket.sendall(bytearray("post " + str(filename),'utf8'))
 		# # load file
-		fileBytes = open(filename, 'rb').read()
+		with open(filename, 'rb') as f:
+			fileBytes = f.read()
 
-		# # Send file to server
-		# socket.RTP_Send(fileBytes)
-		# print(str(fileBytes))
-		print(len(fileBytes))
+		# Sending Length of file in bytes to server
 		rtpClientSocket.sendall((len(fileBytes)).to_bytes(30, byteorder='little'))
-		# rtpClientSocket.sendall(fileBytes)
-		# rtpClientSocket.sendall(b"thisisatest")
-		for b in bytes_from_file(filename):
-			if(b != -1):
-				rtpClientSocket.sendall(b)
-			else:
-				rtpClientSocket.sendall(b"FAIL")	
-		print(filename + " has been sent")
+		check = rtpClientSocket.recv(1024)
+		if(str(check) == str(b'FILEEXISTS')):
+			check = input('This file already exists on the server, do you want to overwrite it? [y,n] ')
+		if (check == 'y'):
+			rtpClientSocket.sendall(b'y')
+			# Send chunks of 1024 bytes to server
+			for b in bytes_from_file(filename):
+				if(b != -1):
+					rtpClientSocket.sendall(b)
+		
+			print(filename + " has been sent to server.")
+		elif(check == 'n'):
+			rtpClientSocket.sendall(b'n')
+			print('Okay. Will not send this file.')
+		else:
+			rtpClientSocket.sendall(b'n')
+			print('Invalid Input. Did not send file.')
 	else:
 		print("Sorry, client can't find that file.")
 
-def receive_file(filename):
-	# # load file
-	rtpClientSocket.sendall(bytearray("get " + str(filename),'utf8'))
 
-	didPass  = rtpClientSocket.recv(1024)
-	if(str(didPass) == str(b'pass')):
-		filesize = rtpClientSocket.recv(30)
-		intBytes = int.from_bytes(filesize, byteorder='little')
-		
-		dataset = bytearray()
-		print("Finished Creating a dataset array... ")
-		run = True
-		i = 0
-		while i < intBytes:
-			rcvData = rtpClientSocket.recv(1024)
-			t = bytearray(rcvData)
-			dataset.extend(t)
-			i = i + len(rcvData)
-			# print(str(i) + ' : ' + rcvData.decode('utf-8'))
 
-		print("Nothing else left to add to dataset... exiting")
-		write_file(filename, dataset)
-		print("Finished getting a file...")
-	else:
-		print("No File Found on Server")
-	
-
-def write_file(filename, dataset):
-
-	if(os.path.exists(filename)):
-		check = input('This file already exists, do you want to overwrite it? [y,n] ')
-	print("Entering write_file function on server")
-# 	# Write file; wb = write and binary
-
-	with open(filename, 'wb') as out:
-		print("Finished creating a new file")
-		out.write(dataset)
-		print("File written on server successfully")
 
 def set_window(newSize):
 	# epdate window size

@@ -41,7 +41,6 @@ def wait_and_receive_file():
 
 def receive_file(con):
 	print("entering receive_file")
-
 	command = con.recv(1024)
 	command = command.decode('utf-8')
 
@@ -59,28 +58,27 @@ def receive_file(con):
 		return False
 	elif (command == "post"):
 		filesize = con.recv(30)
-		print(filename)
 		intBytes = int.from_bytes(filesize, byteorder='little')
-		print(intBytes)
-		# print(filesize)
-		dataset = bytearray()
-		print("Finished Creating a dataset array... ")
-		# print (dataset)
-
-		run = True
-		while run:
-			rcvData = con.recv(1024)
-			if (rcvData != b"FAIL"):
-				dataset.append(int.from_bytes(rcvData, byteorder='little'))
-				# print("Adding to dataset...")
-			else:
-				print("Nothing else left to add to dataset... exiting")
-				run = False
-		
-		print (dataset)
-		write_file(filename, dataset)
-		print("File uplaoded to server....")
-		return False
+		if(os.path.exists(filename)):
+			con.sendall(b'FILEEXISTS')
+		check = con.recv(1024)
+		if (str(check) == str(b'y')):
+			dataset = bytearray()
+			print("Finished Creating a dataset array... ")
+			i = 0
+			while i < intBytes:
+				rcvData = con.recv(1024)
+				t = bytearray(rcvData)
+				dataset.extend(t)
+				i = i + len(rcvData)
+				
+			print("Nothing else left to add to dataset... exiting")
+			write_file(filename, dataset)
+			print("File uploaded to server....")
+			return False
+		elif(str(check) == str(b'n')):
+			print("File not uploaded to server....")
+			return False
 	elif (command == "disconnect"):
 		closeConnection(con)
 		return True
@@ -118,12 +116,11 @@ def send_file(filename, con):
 		con.sendall((len(fileBytes)).to_bytes(30, byteorder='little'))
 		for b in bytes_from_file(filename):
 			if(b != -1):
-				con.send(b)
-			else:
-				pass
-		print("File has been sent to the client.")	
+				con.sendall(b)
+
+		print(filename + " has been sent to client.")
 	else:
-		con.sendall(bytearray("didNotPass",'utf8'))
+		con.sendall(bytearray("didNotpass",'utf8'))
 		print("File was not found on the server")
 
 def set_window(newSize):
