@@ -32,25 +32,24 @@ def receive_file(filename):
 			dataset.extend(t)
 			i = i + len(rcvData)
 
-		print("Finished adding to dataset...")
 		write_file(filename, dataset)
-		print("Completed getting a file from server.")
+		if(debug): print("Completed getting a file from server.")
 	else:
-		print("No File Found on Server.")
+		if(debug): print("No File Found on Server.")
 
 def write_file(filename, dataset):
 
 	if(os.path.exists(filename)):
 		check = input('This file already exists, do you want to overwrite it? [y,n] ')
 		if (check == 'y'):
-			print("Okay. Going to overwrite the file.")
+			if(debug): print("Okay. Going to overwrite the file.")
 			with open(filename, 'wb') as out:
 				out.write(dataset)
 				print("File written on client successfully...")
 		elif(check == 'n'):
-			print("Okay. Will not overwrite the file.")
+			if(debug): print("Okay. Will not overwrite the file.")
 		else:
-			print("Invalid input. Did not overwrite the file.")
+			if(debug): print("Invalid input. Did not overwrite the file.")
 
 
 def bytes_from_file(filename, chunksize = 1024):
@@ -84,15 +83,15 @@ def send_file(filename):
 				if(b != -1):
 					rtpClientSocket.sendall(b)
 		
-			print(filename + " has been sent to server.")
+			if(debug): print(filename + " has been sent to server.")
 		elif(check == 'n'):
 			rtpClientSocket.sendall(b'n')
-			print('Okay. Will not send this file.')
+			if(debug): print('Okay. Will not send this file.')
 		else:
 			rtpClientSocket.sendall(b'n')
-			print('Invalid Input. Did not send file.')
+			if(debug): print('Invalid Input. Did not send file.')
 	else:
-		print("Sorry, client can't find that file.")
+		if(debug): print("Sorry, client can't find that file.")
 
 
 
@@ -102,7 +101,7 @@ def set_window(newSize):
 	windowSize = newSize
 	# socket.setMaxWindowSize(newSize)
 
-	print('New window size set to: ' + str(newSize))
+	if(debug): print('New window size set to: ' + str(newSize))
 
 
 def disconnect():
@@ -110,13 +109,13 @@ def disconnect():
 	rtpClientSocket.sendall(bytearray("disconnect", 'utf8'))
 	rtpClientSocket.close()
 
-	print('Disconnected...')
+	if(debug): print('Disconnected...')
 
 def exit():
 	
 	if isConnected:
 		disconnect()
-	print ("Exiting...")
+	if(debug): print ("Exiting...")
 	sys.exit()
 
 
@@ -126,7 +125,7 @@ if (len(sys.argv) > 2):
 	print("IP is: " + IP)
 	print("Port is: " + str(port))
 else:
-	print("Port and IP is not given. Auto set to 8080 and 128.61.12.27")
+	print("Port and IP not given together. Auto set to 8080 and 128.61.12.27")
 	port = 8080
 	IP = "128.61.12.27"
 
@@ -134,7 +133,11 @@ else:
 # socket = RTP.RTP()
 rtpClientSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 isConnected = False
+debug = False
+isDebug = input("Would you like to turn on debug mode? [y/n] ")
 
+if(isDebug):
+	debug = True
 
 while True:
 	commandInput = input('Enter a command on FTA client - \n[connect, get, post, window, disconnect, exit]: ')

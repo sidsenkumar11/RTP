@@ -13,7 +13,7 @@ def initialize(IPnum, portnum):
 	# socket.RTP_listen(1)
 	rtpServerSocket.bind(('', port))
 	rtpServerSocket.listen(1)
-	print ("Initializion Successful.")
+	if(debug): print ("Initializion Successful.")
 
 def prompt():
 	#try:
@@ -26,7 +26,10 @@ def prompt():
 		s = input('Enter the new window size:')
 		set_window(s)
 	elif (command == 'none'):
-		print("No command entered.")
+		if(debug): print("No command entered.")
+	else:
+		print("Invalid entry.")
+		exit()
 
 	print('Waiting for new connection...')
 
@@ -39,10 +42,10 @@ def wait_and_receive_file():
 			finished = receive_file(con)
 		# closeConnection(con)
 	except:
-		print("Something went wrong in wait_and_receive_file. Restarting.")
-		closeConnection()
-		initialize(IP, port)
-		wait_and_receive_file()
+		if(debug): print("Something went wrong in wait_and_receive_file. Restarting.")
+		# closeConnection()
+		# initialize(IP, port)
+		# wait_and_receive_file()
 
 def receive_file(con):
 	try:
@@ -75,27 +78,26 @@ def receive_file(con):
 					dataset.extend(t)
 					i = i + len(rcvData)
 					
-				print("Finished adding to dataset...")
 				write_file(filename, dataset)
-				print("File uploaded to server.")
+				if(debug): print("File uploaded to server.")
 				return False
 			elif(str(check) == str(b'n')):
-				print("File not uploaded to server.")
+				if(debug): print("File not uploaded to server.")
 				return False
 		elif (command == "disconnect"):
 			closeConnection(con)
 			return True
 	except:
-		print("Something went wrong in receive_file. Restarting.")
-		closeConnection()
-		initialize(IP, port)
-		receive_file()
+		if(debug): print("Something went wrong in receive_file. Restarting.")
+		# closeConnection()
+		# initialize(IP, port)
+		# receive_file()
 
 def write_file(filename, dataset):
 
 	with open(filename, 'wb') as out:
 		out.write(dataset)
-		print("File written on server successfully.")
+		if(debug): print("File written on server successfully.")
 
 
 def bytes_from_file(filename, chunksize = 1024):
@@ -112,7 +114,7 @@ def send_file(filename, con):
 
 	if(os.path.exists(filename)):
 		con.sendall(bytearray("pass",'utf8'))
-		print("File has been found on server.")
+		if(debug): print("File has been found on server.")
 
 		with open(filename, 'rb') as f:
 			fileBytes = f.read()
@@ -122,17 +124,17 @@ def send_file(filename, con):
 			if(b != -1):
 				con.sendall(b)
 
-		print(filename + " has been sent to client.")
+		if(debug): print(filename + " has been sent to client.")
 	else:
 		con.sendall(bytearray("didNotpass",'utf8'))
-		print("File was not found on the server.")
+		if(debug): print("File was not found on the server.")
 
 def set_window(newSize):
 	# epdate window size
 	pass
 	# socket.setMaxWindowSize(newSize)
 
-	print('New window size set to: ' + str(newSize))
+	if(debug): print('New window size set to: ' + str(newSize))
 
 def closeConnection(con):
 	con.close()
@@ -148,6 +150,10 @@ if (len(sys.argv) > 1):
 else:
 	print("Port is not given. Auto set to 8080.")
 	port = 8080
+debug = False
+isDebug = input("Would you like to turn on debug mode? [y/n] ")
+if(isDebug):
+	debug = True
 
 rtpServerSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 IP = socket.gethostbyname(socket.gethostname())
@@ -157,4 +163,4 @@ initialize(IP, port)
 while True:
 	prompt()
 	wait_and_receive_file()
-	print("finished wait_and_receive_file in server")
+	if(debug): print("finished wait_and_receive_file in server")
