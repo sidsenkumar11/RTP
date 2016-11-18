@@ -7,11 +7,10 @@ import os
 
 
 def connect(IP, port): 
-	print("About to connect...")
 	try:
 		rtpClientSocket.connect((IP,port))
 	except:
-		print ("Could not connect to server...quitting now")
+		print ("Could not connect to server.")
 
 	print("Connection Successful to: " + IP + ":" + str(port))
 
@@ -25,7 +24,7 @@ def receive_file(filename):
 		intBytes = int.from_bytes(filesize, byteorder='little')
 		
 		dataset = bytearray()
-		print("Finished Creating a dataset array... ")
+
 		i = 0
 		while i < intBytes:
 			rcvData = rtpClientSocket.recv(1024)
@@ -33,11 +32,11 @@ def receive_file(filename):
 			dataset.extend(t)
 			i = i + len(rcvData)
 
-		print("Nothing else left to add to dataset... exiting")
+		print("Finished adding to dataset...")
 		write_file(filename, dataset)
-		print("Finished getting a file from server.")
+		print("Completed getting a file from server.")
 	else:
-		print("No File Found on Server")
+		print("No File Found on Server.")
 
 def write_file(filename, dataset):
 
@@ -45,12 +44,9 @@ def write_file(filename, dataset):
 		check = input('This file already exists, do you want to overwrite it? [y,n] ')
 		if (check == 'y'):
 			print("Okay. Going to overwrite the file.")
-			print("Entering write_file function on server")
-
 			with open(filename, 'wb') as out:
-				print("Finished creating a new file")
 				out.write(dataset)
-				print("File written on server successfully")
+				print("File written on client successfully...")
 		elif(check == 'n'):
 			print("Okay. Will not overwrite the file.")
 		else:
@@ -117,9 +113,10 @@ def disconnect():
 	print('Disconnected...')
 
 def exit():
-	print ("Exiting...")
+	
 	if isConnected:
 		disconnect()
+	print ("Exiting...")
 	sys.exit()
 
 

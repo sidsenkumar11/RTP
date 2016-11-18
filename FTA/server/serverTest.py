@@ -13,7 +13,7 @@ def initialize(IPnum, portnum):
 	# socket.RTP_listen(1)
 	rtpServerSocket.bind(('', port))
 	rtpServerSocket.listen(1)
-	print ("Finished Initializing...")
+	print ("Initializion Successful.")
 
 def prompt():
 	#try:
@@ -28,11 +28,10 @@ def prompt():
 	elif (command == 'none'):
 		print("No command entered.")
 
-	print('Waiting for new connection.')
+	print('Waiting for new connection...')
 
 def wait_and_receive_file():
 	try:
-		print("Came to wait_and_receive_file in server")
 		con, addr = rtpServerSocket.accept()
 
 		finished = False
@@ -41,11 +40,12 @@ def wait_and_receive_file():
 		# closeConnection(con)
 	except:
 		print("Something went wrong in wait_and_receive_file. Restarting.")
+		closeConnection()
+		initialize(IP, port)
 		wait_and_receive_file()
 
 def receive_file(con):
 	try:
-		print("entering receive_file")
 		command = con.recv(1024)
 		command = command.decode('utf-8')
 
@@ -58,7 +58,6 @@ def receive_file(con):
 		# print("command is: " + str(command))
 
 		if (str(command) == "get"):
-			print("Switching to get function!")
 			send_file(filename, con)
 			return False
 		elif (command == "post"):
@@ -69,7 +68,6 @@ def receive_file(con):
 			check = con.recv(1024)
 			if (str(check) == str(b'y')):
 				dataset = bytearray()
-				print("Finished Creating a dataset array... ")
 				i = 0
 				while i < intBytes:
 					rcvData = con.recv(1024)
@@ -77,29 +75,27 @@ def receive_file(con):
 					dataset.extend(t)
 					i = i + len(rcvData)
 					
-				print("Nothing else left to add to dataset... exiting")
+				print("Finished adding to dataset...")
 				write_file(filename, dataset)
-				print("File uploaded to server....")
+				print("File uploaded to server.")
 				return False
 			elif(str(check) == str(b'n')):
-				print("File not uploaded to server....")
+				print("File not uploaded to server.")
 				return False
 		elif (command == "disconnect"):
 			closeConnection(con)
 			return True
 	except:
 		print("Something went wrong in receive_file. Restarting.")
+		closeConnection()
+		initialize(IP, port)
 		receive_file()
 
 def write_file(filename, dataset):
 
-	print("Entering write_file function on server")
-# 	# Write file; wb = write and binary
-
 	with open(filename, 'wb') as out:
-		print("Finished creating a new file")
 		out.write(dataset)
-		print("File written on server successfully")
+		print("File written on server successfully.")
 
 
 def bytes_from_file(filename, chunksize = 1024):
@@ -116,7 +112,7 @@ def send_file(filename, con):
 
 	if(os.path.exists(filename)):
 		con.sendall(bytearray("pass",'utf8'))
-		print("File has been found on server")
+		print("File has been found on server.")
 
 		with open(filename, 'rb') as f:
 			fileBytes = f.read()
@@ -129,7 +125,7 @@ def send_file(filename, con):
 		print(filename + " has been sent to client.")
 	else:
 		con.sendall(bytearray("didNotpass",'utf8'))
-		print("File was not found on the server")
+		print("File was not found on the server.")
 
 def set_window(newSize):
 	# epdate window size
