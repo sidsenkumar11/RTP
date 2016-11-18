@@ -31,57 +31,65 @@ def prompt():
 	print('Waiting for new connection.')
 
 def wait_and_receive_file():
-	print("Came to wait_and_receive_file in server")
-	con, addr = rtpServerSocket.accept()
+	try:
+		print("Came to wait_and_receive_file in server")
+		con, addr = rtpServerSocket.accept()
 
-	finished = False
-	while not finished:
-		finished = receive_file(con)
-	# closeConnection(con)
+		finished = False
+		while not finished:
+			finished = receive_file(con)
+		# closeConnection(con)
+	except:
+		print("Something went wrong in wait_and_receive_file. Restarting.")
+		wait_and_receive_file()
 
 def receive_file(con):
-	print("entering receive_file")
-	command = con.recv(1024)
-	command = command.decode('utf-8')
+	try:
+		print("entering receive_file")
+		command = con.recv(1024)
+		command = command.decode('utf-8')
 
-	if command != "disconnect":
-		command = command.split(' ')
-		filename = command[1]
-		command = command[0]
+		if command != "disconnect":
+			command = command.split(' ')
+			filename = command[1]
+			command = command[0]
 
-	# print("filename is: " + str(filename))
-	# print("command is: " + str(command))
+		# print("filename is: " + str(filename))
+		# print("command is: " + str(command))
 
-	if (str(command) == "get"):
-		print("Switching to get function!")
-		send_file(filename, con)
-		return False
-	elif (command == "post"):
-		filesize = con.recv(30)
-		intBytes = int.from_bytes(filesize, byteorder='little')
-		if(os.path.exists(filename)):
-			con.sendall(b'FILEEXISTS')
-		check = con.recv(1024)
-		if (str(check) == str(b'y')):
-			dataset = bytearray()
-			print("Finished Creating a dataset array... ")
-			i = 0
-			while i < intBytes:
-				rcvData = con.recv(1024)
-				t = bytearray(rcvData)
-				dataset.extend(t)
-				i = i + len(rcvData)
-				
-			print("Nothing else left to add to dataset... exiting")
-			write_file(filename, dataset)
-			print("File uploaded to server....")
+		if (str(command) == "get"):
+			print("Switching to get function!")
+			send_file(filename, con)
 			return False
-		elif(str(check) == str(b'n')):
-			print("File not uploaded to server....")
-			return False
-	elif (command == "disconnect"):
-		closeConnection(con)
-		return True
+		elif (command == "post"):
+			filesize = con.recv(30)
+			intBytes = int.from_bytes(filesize, byteorder='little')
+			if(os.path.exists(filename)):
+				con.sendall(b'FILEEXISTS')
+			check = con.recv(1024)
+			if (str(check) == str(b'y')):
+				dataset = bytearray()
+				print("Finished Creating a dataset array... ")
+				i = 0
+				while i < intBytes:
+					rcvData = con.recv(1024)
+					t = bytearray(rcvData)
+					dataset.extend(t)
+					i = i + len(rcvData)
+					
+				print("Nothing else left to add to dataset... exiting")
+				write_file(filename, dataset)
+				print("File uploaded to server....")
+				return False
+			elif(str(check) == str(b'n')):
+				print("File not uploaded to server....")
+				return False
+		elif (command == "disconnect"):
+			closeConnection(con)
+			return True
+	except:
+		print("Something went wrong in receive_file. Restarting.")
+		receive_file()
 
 def write_file(filename, dataset):
 
