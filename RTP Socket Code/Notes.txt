@@ -4,6 +4,6 @@ However, RTP does no multiplexing of source/destination ports as this is taken c
 For now, default source_port is 1111
 
 
-For now, seq and ack numbers both start at 0. They also don't wrap around.
+For now, seq and ack numbers both start at 0. They also don't wrap around. Needs to be randomized.
 
 Choosing a Window Size is up to the implementer of RTP.
