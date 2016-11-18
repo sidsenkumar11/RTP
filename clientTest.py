@@ -5,7 +5,6 @@ import sys
 import socket
 import os
 
-
 def connect(IP, port): 
 	print("About to connect...")
 	try:
@@ -30,8 +29,10 @@ def send_file(filename):
 	if(os.path.exists(filename)):
 		# # Need to tell server we are going to send file to server
 		# socket.RTP_Send(bytearray(filename, 'utf-8'))
-		rtpClientSocket.sendall(bytearray("post " + str(filename),'utf8'))
+		rtpClientSocket.sendall(bytearray(filename, 'utf8'))
 		# # load file
+		rtpClientSocket.sendall(bytearray("post",'utf8'))
+
 		fileBytes = open(filename, 'rb').read()
 
 		# # Send file to server
@@ -51,9 +52,9 @@ def send_file(filename):
 		print("Sorry, client can't find that file.")
 
 def receive_file(filename):
+	rtpClientSocket.sendall(bytearray(filename, 'utf8'))
 	# # load file
-	rtpClientSocket.sendall(bytearray("get " + str(filename),'utf8'))
-
+	rtpClientSocket.sendall(bytearray("get",'utf8'))
 	didPass  = rtpClientSocket.recv(1024)
 	if(str(didPass) == str(b'pass')):
 		filesize = rtpClientSocket.recv(30)
@@ -71,21 +72,10 @@ def receive_file(filename):
 				print("Nothing else left to add to dataset... exiting")
 				run = False
 		print(dataset)
-		write_file(filename, dataset)
 		print("Finished getting a file...")
 	else:
 		print("No File Found on Server")
 	
-
-def write_file(filename, dataset):
-
-	print("Entering write_file function on server")
-# 	# Write file; wb = write and binary
-
-	with open(filename, 'wb') as out:
-		print("Finished creating a new file")
-		out.write(dataset)
-		print("File written on server successfully")
 
 def set_window(newSize):
 	# epdate window size
@@ -97,15 +87,12 @@ def set_window(newSize):
 
 def disconnect():
 	# Disconnect from the server
-	rtpClientSocket.sendall(bytearray("disconnect", 'utf8'))
 	rtpClientSocket.close()
 
 	print('Disconnected...')
 
 def exit():
 	print ("Exiting...")
-	if isConnected:
-		disconnect()
 	sys.exit()
 
 
@@ -142,8 +129,8 @@ while True:
 		s = input('Enter the new window size:')
 		set_window(s)
 	elif command == 'disconnect' and isConnected:
-		isConnected = False
 		disconnect()
+		isConnected = False
 	elif command == 'exit':
 		exit()
 	elif not isConnected:
