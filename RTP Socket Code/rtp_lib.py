@@ -68,6 +68,15 @@ def read_segment(buffer):
 
 	return (header[0], header[1], header[2], header[3], header[4], header[5], header[6], header[7], data)
 
+# Returns header size in bytes.
+def header_size():
+
+	return 20
+
+def max_safe_data_size():
+
+	return 512 - header_size()
+
 # Returns this machine's IP address.
 def get_IP():
 	return socket.gethostbyname(socket.gethostname())
