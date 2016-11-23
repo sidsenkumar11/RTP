@@ -1,5 +1,7 @@
 import binascii
 import socket
+import _thread
+from threading import Timer
 from struct import pack, unpack
 
 # Computes the 16-bit BSD checksum on a byte array.
@@ -27,7 +29,7 @@ def create_segment(source_port, destination_port, sequence_num, ack_num, window,
 	segment = pack("!HHLLHHHH", source_port, destination_port, sequence_num, ack_num, special_bits, window, 0, data_size)
 	segment = bytearray(segment)
 	segment = segment + data
-	checksum_data = bytearray([len(segment)]) + segment
+	checksum_data = bytearray(pack("H", len(segment))) + segment
 
 	# Compute checksum on [Segment Length] + [Segment]
 	real_checksum = checksum(checksum_data)
@@ -56,7 +58,7 @@ def read_segment(buffer):
 	orig_segment = pack("!HHLLHHHH", header[0], header[1], header[2], header[3], header[4], header[5], 0, header[7])
 	orig_segment = bytearray(orig_segment)
 	orig_segment = orig_segment + data
-	orig_checksum_data = bytearray([len(orig_segment)]) + orig_segment
+	orig_checksum_data = bytearray(pack("H", len(orig_segment))) + orig_segment
 	real_checksum = checksum(orig_checksum_data)
 
 	if desired_checksum != real_checksum:
@@ -67,6 +69,11 @@ def read_segment(buffer):
 		# print("Checksum matches!")
 
 	return (header[0], header[1], header[2], header[3], header[4], header[5], header[6], header[7], data)
+
+# Parses a header.
+def read_header(buffer):
+
+	return unpack("!HHLLHHHH", segment)
 
 # Returns header size in bytes.
 def header_size():
@@ -80,6 +87,27 @@ def max_safe_data_size():
 # Returns this machine's IP address.
 def get_IP():
 	return socket.gethostbyname(socket.gethostname())
+
+class Watchdog(object):
+
+    def __init__(self, timeout):  # timeout in seconds
+        self.timeout = timeout
+
+    def start(self):
+    	self.timer = Timer(self.timeout, self.handler)
+    	self.timer.daemon = True
+    	self.timer.start()
+
+    def stop(self):
+        self.timer.cancel()
+
+    def reset(self):
+        self.stop()
+        self.start()
+
+    def handler(self):
+        self.stop()
+        _thread.interrupt_main()
 
 if __name__ == '__main__':
 
