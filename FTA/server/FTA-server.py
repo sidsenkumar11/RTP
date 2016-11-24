@@ -1,5 +1,5 @@
-# import rtp_socket
-import socket
+import rtp_socket
+# import socket
 import sys
 import threading
 import os
@@ -173,8 +173,8 @@ if __name__ == '__main__':
 
     # Create and bind socket.
     print(art)
-    rtpServerSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    # rtpServerSocket = rtp_socket(IPv6=False, debug=debug)
+    # rtpServerSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    rtpServerSocket = rtp_socket.rtp_socket(IPv6=False, debug=debug)
     # IP = rtp_socket.get_IP()
     initialize('', port)
 

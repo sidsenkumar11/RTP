@@ -1,5 +1,5 @@
-# import rtp_socket
-import socket
+import rtp_socket
+# import socket
 import sys
 import os
 
@@ -155,8 +155,8 @@ if __name__ == '__main__':
             debug = True
 
     # Create socket.
-    # rtpClientSocket = rtp_socket(IPv6=False, debug=debug)
-    rtpClientSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    rtpClientSocket = rtp_socket.rtp_socket(IPv6=False, debug=debug)
+    # rtpClientSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     isConnected = False
     finished = False
 
