@@ -7,10 +7,10 @@ import sys
 from rtp_lib import *
 
 BUFFER_SIZE = 65536 # 64KB buffer size.
-WINDOW_SIZE =  65535 # Max num. bytes in flight without any ACKs. Max allowable with a 16 bit ACK number.
+WINDOW_SIZE =  int(65535 / max_safe_data_size()) # Max num. segments in flight without any ACKs. Max allowable with a 16 bit ACK number.
 TIMEOUT = 1 # Seconds before timeout.
 MAX_NUM_ATTEMPTS = 3 # Before failed to send/receive in connection.
-MAX_NUM_CONNECTIONS = 2 # Before refusing connections.
+MAX_NUM_CONNECTIONS = 1 # Before refusing connections.
 
 class rtp_socket:
 
@@ -21,7 +21,6 @@ class rtp_socket:
         self.s = socket.socket(socket.AF_INET6, socket.SOCK_DGRAM) if IPv6 else socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
         self.ack_num = 0
-        self.bytes_in_transit = 0
         self.debug = debug
         self.destination_IP = None
         self.destination_port = None
@@ -30,8 +29,11 @@ class rtp_socket:
         self.listening = False
         self.sequence_num = 0
         self.source_port = 1111
-        self.window_remaining = window_size
-        self.window_size = window_size
+        self.window_size = window_size if window_size * max_safe_data_size() <= 65535 else -1
+        self.window_remaining = self.window_size
+
+        if self.window_size == -1:
+            raise Exception("Invalid Window Size")
 
     # Server: Binds UDP socket to an IP and Port.
     def bind(self, info):
@@ -193,6 +195,7 @@ class rtp_socket:
         segment_data_size = max_safe_data_size() if max_safe_data_size() <= self.window_size else self.window_size
         win_base = 0
         next_seg = 0
+        segments_in_transit = 0
 
         # 1. Split data into segments.
         segments = [None] * math.ceil(float(num_bytes) / segment_data_size)
@@ -214,10 +217,10 @@ class rtp_socket:
             ack_nums[len(segments) - 1] = self.sequence_num + byte_num
 
         # 2. Send initial segments.
-        while next_seg < len(segments) and self.bytes_in_transit + len(segments[next_seg]) - header_size() <= self.window_size:
+        while next_seg < len(segments) and segments_in_transit + 1 <= self.window_size:
 
             self.s.sendto(segments[next_seg], (self.destination_IP, self.destination_port))
-            self.bytes_in_transit = self.bytes_in_transit + len(segments[next_seg])
+            segments_in_transit = segments_in_transit + 1
             next_seg = next_seg + 1
 
         # 3. Send segments as we receive ACKs.
@@ -240,14 +243,14 @@ class rtp_socket:
                             print("Received ACK: " + str(ack_seg[3]))
                         signal.alarm(0)
                         self.sequence_num = self.sequence_num + len(segments[win_base]) - header_size()
-                        self.bytes_in_transit = self.bytes_in_transit - len(segments[win_base])
+                        segments_in_transit = segments_in_transit - 1
                         win_base = win_base + 1
                         attempt_num = 1
 
                         # While space in window, send another segment.
-                        while next_seg < len(segments) and self.bytes_in_transit + len(segments[next_seg]) - header_size() <= self.window_size:
+                        while next_seg < len(segments) and segments_in_transit + 1 <= self.window_size:
                             self.s.sendto(segments[next_seg], (self.destination_IP, self.destination_port))
-                            self.bytes_in_transit = self.bytes_in_transit + len(segments[next_seg])
+                            segments_in_transit = segments_in_transit + 1
                             next_seg = next_seg + 1
                 elif self.debug:
                     print("Packet was corrupted.")
@@ -321,7 +324,6 @@ class rtp_socket:
 
         # Free buffers and reset variables.
         self.ack_num = 0
-        self.bytes_in_transit = 0
         self.debug = False
         self.destination_IP = ''
         self.destination_port = 0

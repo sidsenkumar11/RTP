@@ -8,8 +8,22 @@ For now, seq and ack numbers both start at 0. They also don't wrap around. Needs
 
 Choosing a Window Size is up to the implementer of RTP.
 
+
+
+TODO:
+
 //the recv method MUST Be used right after accept
 
 try multiple connections at same time not working
 
 all #TODO
+
+Encryption
+
+FIN segments
+
+IPv6
+
+Remove auto port / IP from client & server
+
+Test invalid window size exception
