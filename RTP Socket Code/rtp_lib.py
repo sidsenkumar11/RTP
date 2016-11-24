@@ -1,7 +1,5 @@
-import binascii
+# import binascii
 import socket
-import _thread
-from threading import Timer
 from struct import pack, unpack
 
 # Computes the 16-bit BSD checksum on a byte array.
@@ -87,27 +85,6 @@ def max_safe_data_size():
 # Returns this machine's IP address.
 def get_IP():
 	return socket.gethostbyname(socket.gethostname())
-
-class Watchdog(object):
-
-    def __init__(self, timeout):  # timeout in seconds
-        self.timeout = timeout
-
-    def start(self):
-    	self.timer = Timer(self.timeout, self.handler)
-    	self.timer.daemon = True
-    	self.timer.start()
-
-    def stop(self):
-        self.timer.cancel()
-
-    def reset(self):
-        self.stop()
-        self.start()
-
-    def handler(self):
-        self.stop()
-        _thread.interrupt_main()
 
 if __name__ == '__main__':
 

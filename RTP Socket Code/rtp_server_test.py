@@ -5,9 +5,13 @@ sock.bind(('127.0.1.1', 8080))
 sock.listen()
 
 # while 1:
+data = b''
 conn, addr = sock.accept()
-data = conn.recv(11)
-conn.close(parent_socket=sock)
-print("Received Data: " + str(data))
-
+try:
+	data = conn.recv(566799)
+	conn.close(parent_socket=sock)
+except:
+	conn.close()
 sock.close()
+
+print("Received " + str(len(data)) + " bytes")

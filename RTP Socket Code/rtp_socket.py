@@ -1,8 +1,10 @@
 import math
 import threading
+import signal
 import socket
-import time
 from rtp_lib import *
+
+import sys
 
 # UDP socket Max Data returned.
 BUFFER_SIZE = 65536 # 64KB Buffer size.
@@ -30,7 +32,7 @@ class rtp_socket:
 
         if not con:
             self.s = socket.socket(socket.AF_INET6, socket.SOCK_DGRAM) if IPv6 else socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self.s.settimeout(TIMEOUT)
+        # self.s.settimeout(TIMEOUT)
 
 
     # Server: Binds UDP socket to an IP and Port.
@@ -58,7 +60,7 @@ class rtp_socket:
             print("Accepting connections! Waiting for SYN...")
 
         # Wait for SYN segment.
-        self.s.settimeout(None)
+        # self.s.settimeout(None)
         syn_seg, client_address = self.s.recvfrom(BUFFER_SIZE)
         syn_seg = read_segment(syn_seg)
 
@@ -117,7 +119,7 @@ class rtp_socket:
         conn.set_connection_info(con_sock_info)
 
         # Connection established.
-        self.s.settimeout(TIMEOUT)
+        # self.s.settimeout(TIMEOUT)
         self.current_num_connections = self.current_num_connections + 1
         return (conn, client_address)
 
@@ -179,19 +181,10 @@ class rtp_socket:
         num_bytes = len(data)
 
         # Sends data through connection
-
         self.send_data(data, num_bytes)
-        # send_thread = threading.Thread(target=self.send_data, args=(data, num_bytes))
-        # ack_thread = threading.Thread(target=receive_ack, args = ())
 
-        # send_thread.daemon = True
-        # send_thread.start()
-        # send_thread.join()
-
-        print("Inserted " + str(num_bytes) + " bytes of data into sendbuffer")
-        # print(self.send_buffer[0:num_bytes])
-        # ack_thread.daemon = True
-        # ack_thread.start()
+        if self.debug:
+            print("Sent data successfully")
 
     # Send all the bytes of data.
     def send_data(self, data, num_bytes):
@@ -221,112 +214,115 @@ class rtp_socket:
             byte_num = byte_num + segment_data_size
             ack_nums[len(segments) - 1] = self.sequence_num + byte_num
 
-        # for segment in segments:
-        #     print(read_segment(segment))
-
         # 2. Send initial segments.
-        # sent = []
         while next_seg < len(segments) and self.bytes_in_transit + len(segments[next_seg]) <= self.window_size:
 
-            # sent.append(segments[next_seg])
             self.s.sendto(segments[next_seg], (self.destination_IP, self.destination_port))
             self.bytes_in_transit = self.bytes_in_transit + len(segments[next_seg])
             next_seg = next_seg + 1
 
-            print(str(next_seg) + " Data segment sent")
-
-        # for segment in sent:
-        #     print(read_segment(segment))
-
         # 3. Send segments as we receive ACKs.
-        # timer = Watchdog(2)
-        # timer = threading.Timer(0.4, self.timeout, args=(segments, win_base, next_seg, timer))
-        # timer.start()
+        signal.signal(signal.SIGALRM, self.timeout)
         attempt_num = 1
+
         while win_base < len(segments):
 
             try:
+                signal.alarm(TIMEOUT)
                 ack_seg = self.s.recv(header_size())
-                print("received ack_seg: " + str(binascii.hexlify(ack_seg)))
                 ack_seg = read_segment(ack_seg)
+
                 if ack_seg != None:
+
                     # No data corruption.
-                    # print("There was no data corruption")
-                    # print("Desired ACK number is " + str(ack_seg[3]))
-                    # print("Received ACK number is " + str(ack_nums[win_base]))
                     if ack_seg[4] & 0x4 == 0x4 and ack_seg[3] == ack_nums[win_base]:
                         # Received the proper ACK.
-                        # timer.stop()
-                        # print("Received the proper ack")
+                        if self.debug:
+                            print("Received ACK: " + str(ack_seg[3]))
+                        signal.alarm(0)
                         self.sequence_num = self.sequence_num + len(segments[win_base]) - header_size()
                         self.bytes_in_transit = self.bytes_in_transit - len(segments[win_base])
                         win_base = win_base + 1
-                        next_seg = next_seg + 1
-                        # print("New win_base is: " + str(win_base))
-                        # print("Len segments is: " + str(len(segments)))
+                        attempt_num = 1
 
-                        # while space in window, send another segment.
+                        # While space in window, send another segment.
                         while next_seg < len(segments) and self.bytes_in_transit + len(segments[next_seg]) <= self.window_size:
-                            self.s.sendto(segments[next_seg], (self.destination_IP, destination_port))
+                            self.s.sendto(segments[next_seg], (self.destination_IP, self.destination_port))
                             self.bytes_in_transit = self.bytes_in_transit + len(segments[next_seg])
                             next_seg = next_seg + 1
+                elif self.debug:
+                    print("Packet was corrupted.")
 
-                        # timer.reset()
-                        # timer.start()
-
-            except:
+            except TimeoutError:
+                signal.alarm(0)
                 attempt_num = attempt_num + 1
                 if attempt_num > MAX_NUM_ATTEMPTS:
                     return
-                self.timeout(segments, win_base, next_seg)
-                # timer.reset()
-                # timer.start()
+                # self.timeout(segments, win_base, next_seg)
+                print("ACK NOT RECEIVED TIMED OUT - segments_length: " + str(len(segments)) + ", win_base: " + str(win_base) + ", next_seg: " + str(next_seg))
+                for i in range(win_base, next_seg):
+                    if i < len(segments):
+                        self.s.sendto(segments[i], (self.destination_IP, self.destination_port))
 
-    def timeout(self, segments, win_base, next_seg):
-        print("ACK NOT RECEIVED TIMED OUT")
-        for i in range(win_base, next_seg):
-            self.s.sendto(segments[i], (self.destination_IP, self.destination_port))
+            except:
+                 print("Unexpected error: " + str(sys.exc_info()[0]))
+
+    def timeout(self):
+        # print("ACK NOT RECEIVED TIMED OUT - segments_length: " + str(len(segments)) + ", win_base: " + str(win_base) + ", next_seg: " + str(next_seg))
+        # for i in range(win_base, next_seg):
+        #     self.s.sendto(segments[i], (self.destination_IP, self.destination_port))
+        raise TimeoutError("ACK not received. Re-sending Segment...")
 
     def recv(self, data_size):
 
         data = bytearray()
+        num_tries = 1
+        signal.signal(signal.SIGALRM, self.timeout)
 
         while len(data) < data_size:
-            segment = self.s.recv(max_safe_data_size() + header_size())
-            # # Get header.
-            # header_remaining = header_size()
-            # segment = bytearray()
-            # while header_remaining > 0:
-            #     header_chunk = self.s.recvfrom(header_remaining)[0]
-            #     print("something received")
-            #     segment.extend(header_chunk)
-            #     header_remaining -= len(header_chunk)
+            # self.s.setblocking(True)
+            try:
+                signal.alarm(2)
+                segment = self.s.recv(max_safe_data_size() + header_size())
+                signal.alarm(0)
+                # # Get header.
+                # header_remaining = header_size()
+                # segment = bytearray()
+                # while header_remaining > 0:
+                #     header_chunk = self.s.recvfrom(header_remaining)[0]
+                #     print("something received")
+                #     segment.extend(header_chunk)
+                #     header_remaining -= len(header_chunk)
 
-            # # Get data in segment.
-            # segment_data_size = read_header(segment[:header_size()])[7]
-            # data_remaining = segment_data_size + header_remaining # Might have received data with header.
+                # # Get data in segment.
+                # segment_data_size = read_header(segment[:header_size()])[7]
+                # data_remaining = segment_data_size + header_remaining # Might have received data with header.
 
-            # while data_remaining > 0:
-            #     data_chunk = self.s.recvfrom(data_remaining)[0]
-            #     segment.extend(data_chunk)
-            #     data_remaining -= len(data_chunk)
+                # while data_remaining > 0:
+                #     data_chunk = self.s.recvfrom(data_remaining)[0]
+                #     segment.extend(data_chunk)
+                #     data_remaining -= len(data_chunk)
 
-            # Received the whole segment.
-            segment = read_segment(segment)
-            segment_data_size = segment[7]
+                # Received the whole segment.
+                segment = read_segment(segment)
+                segment_data_size = segment[7]
+                # num_tries = 1
 
-            # print("The segment was :" + str(segment))
-            # print("Seq number      :" + str(segment[2]))
-            # print("My ack_num      :" + str(self.ack_num))
+                # print("The segment was :" + str(segment))
+                # print("Seq number      :" + str(segment[2]))
+                # print("My ack_num      :" + str(self.ack_num))
 
-            if segment != None and segment[2] == self.ack_num:
-                # Checksum matched and segment_num was expected.
-                # Place data into receive_buffer
-                print("Destination is: " + str(self.get_destination()))
-                data.extend(segment[8])
-                self.ack_num += segment_data_size
-                self.s.sendto(create_segment(self.source_port, self.destination_port, self.sequence_num, self.ack_num, self.window_remaining, 0, b'', ack=True), self.get_destination())
-        
+                if segment != None and segment[2] == self.ack_num:
+                    # Checksum matched and segment_num was expected.
+                    # Place data into receive_buffer
+                    data.extend(segment[8])
+                    self.ack_num += segment_data_size
+                    self.s.sendto(create_segment(self.source_port, self.destination_port, self.sequence_num, self.ack_num, self.window_remaining, 0, b'', ack=True), self.get_destination())
+
+                # print("Received " + str(len(data)))
+                # print("Desire:  " + str(data_size))
+            except:
+                return data
         return data
 
     def close(self, parent_socket=None):
