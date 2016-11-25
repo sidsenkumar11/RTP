@@ -27,3 +27,7 @@ IPv6
 Remove auto port / IP from client & server
 
 Test invalid window size exception
+
+Remove traversal of directory to RTP in FTA server/client
+
+Make sure server fails properly (uncomment try/catch in FTA)
