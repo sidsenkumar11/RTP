@@ -1,0 +1,44 @@
+Known bugs
+
+- Source port of RTP socket could overlap with another source port on the same host. No way to tell what ports are being used globally.
+
+
+
+def prompt():
+    finished = False
+    while not finished:
+        commandInput = input('Enter some command for the FTA Server - [window, terminate]: ')
+        commandInput = commandInput.split(' ')
+        command = commandInput[0]
+        commandArg = None
+
+        if len(commandInput) > 1:
+            commandArg = commandInput[1]
+
+        if command == 'terminate':
+            rtpServerSocket.close()
+            should_terminate = True
+            finished = True
+        elif command == 'window':
+            window_size = None
+            try:
+                window_size = int(commandArg)
+            except:
+                print("window command must be followed by an integer. Please try again.")
+
+            if window_size != None:
+                print("Attempting to change window to: " + str(commandArg))
+                set_window(commandArg)
+        else:
+            print('That was not valid. Please enter a valid command.')
+
+    # Forever check command input by the user and run server until terminate command entered.
+    # command_thread = threading.Thread(target=prompt)
+    # command_thread.daemon = True
+    # command_thread.start()
+
+    # IP = rtp_socket.get_IP()
+
+        # if fta_lib.yn_prompt("Change window?") == 'y':
+        #     value = input("New window value: ")
+        #     set_window(rtpServerSocket, value)

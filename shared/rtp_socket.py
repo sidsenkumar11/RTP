@@ -1,88 +1,125 @@
+from shared.rtp_lib import *
 import math
-import threading
+import random
 import signal
 import socket
 import sys
 
-from rtp_lib import *
-
-BUFFER_SIZE = 65536 # 64KB buffer size.
-WINDOW_SIZE =  int(65535 / max_safe_data_size()) # Max num. segments in flight without any ACKs. Max allowable with a 16 bit ACK number.
-TIMEOUT = 1 # Seconds before timeout.
-MAX_NUM_ATTEMPTS = 3 # Before failed to send/receive in connection.
-MAX_NUM_CONNECTIONS = 1 # Before refusing connections.
+# Connection constants.
+TIMEOUT         = 1     # Seconds before timeout.
+MAX_ATTEMPTS    = 3     # Before failed to send/receive in connection.
+MAX_CONNECTIONS = 1     # Before refusing connections.
 
 class rtp_socket:
+    connection_count = 0
 
     # Creates a UDP socket and initializes connection variables.
-    def __init__(self, IPv6=False, window_size=WINDOW_SIZE, debug=False):
+    def __init__(self, IPv6=False, debug=False):
 
         # Create UDP socket.
-        self.s = socket.socket(socket.AF_INET6, socket.SOCK_DGRAM) if IPv6 else socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        if IPv6:
+            self.s = socket.socket(socket.AF_INET6, socket.SOCK_DGRAM)
+        else:
+            self.s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
+        self.source_port = random.randint(1024, 65535)
+        self.destination_port = None
+        self.sequence_num = 0
         self.ack_num = 0
+
+        self.buffer_size = INITIAL_BUFFER_SIZE
+        self.window_size = INITIAL_WINDOW_SIZE
+        self.buffer_remaining = INITIAL_BUFFER_SIZE
+        self.window_remaining = INITIAL_WINDOW_SIZE
+
         self.debug = debug
         self.destination_IP = None
-        self.destination_port = None
-        self.first_data_segment = None
-        self.IPv6 = IPv6
-        self.is_conn = False
         self.listening = False
-        self.sequence_num = 0
-        self.source_port = 1111
-        self.window_size = window_size if window_size * max_safe_data_size() <= 65535 else -1
-        self.window_remaining = self.window_size
+        self.IPv6 = IPv6
 
-        if self.window_size == -1:
-            raise Exception("Invalid Window Size")
+        self.first_data_segment = None
+        self.connected_to_client = False
 
-    # Server: Binds UDP socket to an IP and Port.
-    def bind(self, info):
-        self.s.bind(info)
+    def set_window_size(self, n):
+        """Updates the window size to at most n segments of data."""
+        if n <= 0:
+            raise ValueError("Window size must be > 0")
+        self.window_size = n
+        self.buffer_size = n * MAX_DATA_PER_SEGMENT
 
-    # Server: Sets RTP socket to listen for connections.
-    def listen(self, num_connections=MAX_NUM_CONNECTIONS):
-        self.listening = True
-        rtp_socket.current_num_connections = 0
-        self.max_connections = num_connections
+    def set_buffer_size(self, n):
+        """Updates the buffer size to at most n bytes of data."""
+        if n <= HEADER_SIZE:
+            raise ValueError(f"Buffer size must be greater than the header size ({HEADER_SIZE})")
+        self.buffer_size = n
+        self.window_size = math.ceil(n / MAX_SAFE_UDP_SIZE)
 
-    # Server: Accepts a connection.
-    def accept(self, should_timeout=False):
+    def close(self):
 
-        if not self.listening:
-            raise ConnectionRefusedError("Socket not listening for connections")
-
-        if rtp_socket.current_num_connections >= self.max_connections:
-            raise ConnectionRefusedError("All connections full")
+        # Closes the connection
+        # Releases resoures associated with connection
 
         if self.debug:
-            print("Accepting connections! Waiting for SYN...")
+            print("Closing connection...")
+
+        if self.destination_IP != None and self.destination_port != None:
+            if self.debug:
+                print("Send FIN packet")
+
+        # Free buffers and reset variables.
+        # self.ack_num = 0
+        # self.debug = False
+        # self.destination_IP = ''
+        # self.destination_port = 0
+        # self.IPv6 = False
+        # self.listening = False
+        # self.sequence_num = 0
+        # self.source_port = 1111
+        # self.window_remaining = 0
+        # self.window_size = 0
+        # self.s.close()
+        if self.debug:
+            print("Connection closed!")
+
+
+    def bind(self, info):
+        """Server: Binds UDP socket to (IP, port)."""
+        self.s.bind(info)
+        self.source_port = info[1]
+
+    def listen(self, max_connections=MAX_CONNECTIONS):
+        """Server: Sets RTP socket to listen for connections."""
+        self.listening = True
+        self.max_connections = max_connections
+
+    def accept(self):
+        """Server: Accepts a connection."""
+
+        if not self.listening:
+            raise ConnectionRefusedError("Socket not listening for connections.")
+
+        if rtp_socket.connection_count >= self.max_connections:
+            raise ConnectionRefusedError("All connections full.")
+
+        if self.debug:
+            print("Accepting connections! Waiting for client SYNs...")
 
         # Wait for SYN segment.
-        if should_timeout:
-            signal.signal(signal.SIGALRM, self.timeout)
-            signal.alarm(TIMEOUT)
+        while True:
+            buffer, client_address = self.s.recvfrom(self.buffer_size)
+            buffer = read_segment(buffer)
 
-        syn_seg, client_address = self.s.recvfrom(max_safe_data_size() + header_size())
-        if should_timeout:
-            signal.alarm(0)
-        syn_seg = read_segment(syn_seg)
-
-        while syn_seg == None or syn_seg[4] & 0x2 != 0x2:
-            # Packet corrupted or packet was not SYN.
-            if self.debug:
+            if buffer is not None and buffer[4] & 0x2 == 0x2:
+                break
+            elif self.debug:
                 print("Received a packet that was not SYN or was corrupted")
-
-            # Wait for retransmission.
-            syn_seg, client_address = self.s.recvfrom(max_safe_data_size() + header_size())
-            syn_seg = read_segment(syn_seg)
 
         if self.debug:
             print("Received SYN! Sending SYN/ACK, waiting for an ACK...")
 
         # On SYN received:
         con_sock_info = {}
-        con_sock_info['opp_host_window'] = syn_seg[5]
+        con_sock_info['opp_host_window'] = buffer[5]
         con_sock_info['ack_num'] = 1
         con_sock_info['seq_num'] = 1
         con_sock_info['destination_IP'] = client_address[0]
@@ -104,7 +141,7 @@ class rtp_socket:
             try:
                 self.s.sendto(synack_seg, (client_address[0], client_address[1]))
                 signal.alarm(TIMEOUT)
-                ack_seg = read_segment(self.s.recvfrom(max_safe_data_size() + header_size())[0])
+                ack_seg = read_segment(self.s.recvfrom(MAX_DATA_PER_SEGMENT + HEADER_SIZE)[0])
                 signal.alarm(0)
                 if ack_seg != None:
                     response_received = True
@@ -112,7 +149,7 @@ class rtp_socket:
                 signal.alarm(0)
                 attempt_num = attempt_num + 1
 
-            if attempt_num > MAX_NUM_ATTEMPTS:
+            if attempt_num > MAX_ATTEMPTS:
                 raise TimeoutError("Could not reach client destination: " + str(client_address[0]) + ":" + str(client_address[1]))
 
         # On ACK received:
@@ -124,12 +161,53 @@ class rtp_socket:
 
         # Create connection socket.
         con_sock_info['socket'] = self.s.dup()
-        conn = rtp_socket(IPv6=self.IPv6, window_size=self.window_size, debug=self.debug)
+        conn = rtp_socket(IPv6=self.IPv6, debug=self.debug)
         conn.set_connection_info(con_sock_info)
 
         # Connection established.
-        rtp_socket.current_num_connections = rtp_socket.current_num_connections + 1
+        rtp_socket.connection_count += 1
         return (conn, client_address)
+
+    # Server: Initializes variables for a new server connection.
+    def from_connection_info(info, debug):
+
+        s = rtp_socket(IPv6=info['IPv6'], debug=debug)
+        s.set_buffer_size(info['buffer_size'])
+        s.ack_num = info['ack_num']
+        s.sequence_num = info['seq_num']
+        s.destination_IP = info['destination_IP']
+        s.destination_port = info['destination_port']
+        s.first_data_segment = info['first_data_segment']
+        s.connected_to_client = True
+        s.s.connect((s.destination_IP, s.destination_port))
+        self.s = con_info['socket']
+
+        if con_info['first_data_segment'] != None:
+            if self.debug:
+                print("Server got data for first data segment instead of ACK.")
+
+    # Server: Initializes variables for a new server connection.
+    def set_connection_info(self, con_info):
+        self.window_size = con_info['opp_host_window']
+        self.ack_num = con_info['ack_num']
+        self.sequence_num = con_info['seq_num']
+        self.destination_IP = con_info['destination_IP']
+        self.destination_port = con_info['destination_port']
+        self.first_data_segment = con_info['first_data_segment']
+        self.connected_to_client = True
+
+        self.s.connect((self.destination_IP, self.destination_port))
+        self.s = con_info['socket']
+
+        if con_info['first_data_segment'] != None:
+            if self.debug:
+                print("Server got data for first data segment instead of ACK.")
+
+
+    # ------------------------------------------
+    # CLIENT
+    # ------------------------------------------
+
 
     # Client: Perform 3-way handshake and set up buffers.
     def connect(self, destination):
@@ -168,7 +246,7 @@ class rtp_socket:
                 signal.alarm(0)
                 attempt_num = attempt_num + 1
 
-            if attempt_num > MAX_NUM_ATTEMPTS:
+            if attempt_num > MAX_ATTEMPTS:
                 raise TimeoutError("Could not reach server destination: " + self.destination_IP + ":" + str(self.destination_port))
 
         # TODO: Parse synack_seg
@@ -203,7 +281,7 @@ class rtp_socket:
 
         # 0. GBN Sliding Window Protocol Variables.
         byte_num = 0
-        segment_data_size = max_safe_data_size() if max_safe_data_size() <= self.window_size else self.window_size
+        segment_data_size = MAX_DATA_PER_SEGMENT if MAX_DATA_PER_SEGMENT <= self.window_size else self.window_size
         win_base = 0
         next_seg = 0
         segments_in_transit = 0
@@ -242,7 +320,7 @@ class rtp_socket:
 
             try:
                 signal.alarm(TIMEOUT)
-                ack_seg = self.s.recv(header_size())
+                ack_seg = self.s.recv(HEADER_SIZE)
                 ack_seg = read_segment(ack_seg)
 
                 if ack_seg != None:
@@ -253,7 +331,7 @@ class rtp_socket:
                         if self.debug:
                             print("Received ACK: " + str(ack_seg[3]))
                         signal.alarm(0)
-                        self.sequence_num = self.sequence_num + len(segments[win_base]) - header_size()
+                        self.sequence_num = self.sequence_num + len(segments[win_base]) - HEADER_SIZE
                         segments_in_transit = segments_in_transit - 1
                         win_base = win_base + 1
                         attempt_num = 1
@@ -272,7 +350,7 @@ class rtp_socket:
                 if self.debug:
                     print("ACK NOT RECEIVED TIMED OUT - segments_length: " + str(len(segments)) + ", win_base: " + str(win_base) + ", next_seg: " + str(next_seg))
                 attempt_num = attempt_num + 1
-                if attempt_num > MAX_NUM_ATTEMPTS:
+                if attempt_num > MAX_ATTEMPTS:
                     return
 
                 # Retransmit window.
@@ -297,13 +375,23 @@ class rtp_socket:
             if self.first_data_segment[2] == self.ack_num:
                 data.extend(self.first_data_segment[8])
                 self.ack_num += self.first_data_segment[7]
-                self.s.sendto(create_segment(self.source_port, self.destination_port, self.sequence_num, self.ack_num, self.window_remaining, 0, b'', ack=True), self.get_destination())
+                self.s.sendto(
+                    create_segment(
+                        self.source_port,
+                        self.destination_port,
+                        self.sequence_num,
+                        self.ack_num,
+                        self.window_remaining,
+                        0,
+                        b'',
+                        ack=True),
+                    (self.destination_IP, self.destination_port))
                 self.first_data_segment = None
 
         received_something = False
         while not received_something:
             try:
-                segment = self.s.recv(max_safe_data_size() + header_size())
+                segment = self.s.recv(MAX_DATA_PER_SEGMENT + HEADER_SIZE)
                 # Received the whole segment.
                 segment = read_segment(segment)
                 if segment != None and segment[2] == self.ack_num:
@@ -312,61 +400,18 @@ class rtp_socket:
                     segment_data_size = segment[7]
                     data.extend(segment[8])
                     self.ack_num += segment_data_size
-                    self.s.sendto(create_segment(self.source_port, self.destination_port, self.sequence_num, self.ack_num, self.window_remaining, 0, b'', ack=True), self.get_destination())
+                    self.s.sendto(
+                        create_segment(
+                            self.source_port,
+                            self.destination_port,
+                            self.sequence_num,
+                            self.ack_num,
+                            self.window_remaining,
+                            0,
+                            b'',
+                            ack=True),
+                            (self.destination_IP, self.destination_port))
                     received_something = True
             except:
                 print('Error occurred in rtp_socket.recv')
         return data
-
-    def close(self):
-
-        # Closes the connection
-        # Releases resoures associated with connection
-
-        if self.debug:
-            print("Closing connection...")
-
-        if self.destination_IP != None and self.destination_port != None:
-            if self.debug:
-                print("Send FIN packet")
-
-        # Free buffers and reset variables.
-        # self.ack_num = 0
-        # self.debug = False
-        # self.destination_IP = ''
-        # self.destination_port = 0
-        # self.IPv6 = False
-        # self.listening = False
-        # self.sequence_num = 0
-        # self.source_port = 1111
-        # self.window_remaining = 0
-        # self.window_size = 0
-        # self.s.close()
-        if self.is_conn:
-            rtp_socket.current_num_connections -= 1
-        if self.debug:
-            print("Connection closed!")
-
-    # TODO: Move contents of buffer into new buffer of new window size.
-    def set_window_size(self, n):
-        self.window_size = n
-
-    def get_destination(self):
-        return (self.destination_IP, self.destination_port)
-
-    # Server: Initializes variables for a new server connection.
-    def set_connection_info(self, con_info):
-        self.window_size = con_info['opp_host_window']
-        self.ack_num = con_info['ack_num']
-        self.sequence_num = con_info['seq_num']
-        self.destination_IP = con_info['destination_IP']
-        self.destination_port = con_info['destination_port']
-        self.first_data_segment = con_info['first_data_segment']
-        self.is_conn = True
-
-        self.s.connect((self.destination_IP, self.destination_port))
-        self.s = con_info['socket']
-
-        if con_info['first_data_segment'] != None:
-            if self.debug:
-                print("Server got data for first data segment instead of ACK.")
