@@ -1,3 +1,4 @@
+import logging
 import os
 
 GET            = "GET "
@@ -8,6 +9,9 @@ CONFIRM        = "CONFIRM"
 REJECT         = "REJECT "
 CHECK_LEN      = len(CONFIRM)
 COMMAND_LEN    = len(GET)
+
+def configure_logger(debug):
+    logging.basicConfig(format='[%(asctime)s][%(levelname)s][%(name)s]: %(message)s', datefmt='%m/%d/%Y %I:%M:%S %p', level=logging.DEBUG if debug else logging.WARN)
 
 def yn_prompt(message):
     response = "initial_value"

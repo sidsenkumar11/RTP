@@ -9,6 +9,7 @@ import threading
 
 def exec_commands(con, addr, connections, run_event):
     try:
+        # stop listening for commands on ctrl+c
         while run_event.is_set():
             # get command and length of filename
             command = con.recv(COMMAND_LEN).decode('ascii')
@@ -53,6 +54,8 @@ def send_file(filename, con):
     print(f"{filename} has been sent to client.")
 
 def main(port, debug, real):
+    fta_lib.configure_logger(debug)
+
     # Bind and listen to socket.
     if real:
         import socket
@@ -80,7 +83,7 @@ def main(port, debug, real):
         except KeyboardInterrupt:
             run_event.clear()
             for t in connections.values():
-                t.join(.1)
+                t.join(.1) # timeout if connection takes too long to finish
             break
         except:
             print("Something went wrong with client interaction.")

@@ -141,13 +141,12 @@ Enter a command on FTA client -
             print("Please reconnect.")
         except:
             connected = disconnect(rtpClientSocket, connected)
-            if debug:
-                print("Something went wrong while talking to the server.")
-                print("You have been disconnected.")
-                print('--------------------------------------')
-                print(str(sys.exc_info()[1]))
-                print('--------------------------------------')
-                print('Restarting...')
+            print("Something went wrong while talking to the server.")
+            print("You have been disconnected.")
+            print('--------------------------------------')
+            print(str(sys.exc_info()[1]))
+            print('--------------------------------------')
+            print('Restarting...')
 
 
 if __name__ == '__main__':
