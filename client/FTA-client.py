@@ -1,220 +1,207 @@
-import sys
-# sys.path.insert(0, '/home/azmuth/Documents/RTP/RTP Socket Code')
-
-import rtp_socket
-# import socket
-import sys
+import argparse
 import os
+import socket
+import sys
+import time
+import traceback
 
-def connect(IP, port): 
+sys.path.append("..")
+sys.path.append(".")
+
+from shared import fta_lib, rtp_socket
+from shared.fta_lib import CHECK_LEN, CONFIRM, FILE_FOUND, FILE_NOT_FOUND, GET, POST, REJECT, recv_exact
+
+
+def connect(IP, port, rtpClientSocket, connected):
+    if connected:
+        print("You are already connected to FTA-Server.")
+        return True
+
     try:
-        rtpClientSocket.connect((IP,port))
-    except:
-        print ("Could not connect to server.")
+        rtpClientSocket.connect((IP, port))
+        print(f"Connection successful to: {IP}:{port}")
+        return True
+    except ConnectionRefusedError as e:
+        print(repr(e))
         return False
 
-    print("Connection Successful to: " + IP + ":" + str(port))
-    return True
 
-def receive_file(filename):
-    send_generic(rtpClientSocket, bytearray("get " + str(filename),'utf8'))
+def disconnect(rtpClientSocket, connected, printError=False):
+    if not connected:
+        if printError:
+            print("Not connected to FTP-Server. Please connect first.")
+        return False
 
-    filesize = recv_generic(rtpClientSocket, 5)
-    intBytes = int.from_bytes(filesize, byteorder='little')
-    if (intBytes != 0):
-        dataset = bytearray()
-        i = 0
-        while i < intBytes:
-            rcvData = rtpClientSocket.recv(1024)
-            t = bytearray(rcvData)
-            dataset.extend(t)
-            i = i + len(rcvData)
-            
-        write_file(filename, dataset)
-    else:
-        print("Sorry, this file does not appear to exist.")
+    print("Disconnecting...")
+    rtpClientSocket.close()
+    print("Disconnected.")
+    return False
 
-def write_file(filename, dataset):
 
-    if(os.path.exists(filename)):
-        check = input('This file already exists, do you want to overwrite it? [y,n]: ')
-        if (check == 'y'):
-            print("Okay. Going to overwrite the file.")
-            with open(filename, 'wb') as out:
-                out.write(dataset)
-            print("Successfully downloaded " + str(filename) + " from server.")
-        elif(check == 'n'):
-            print("Okay. Will not overwrite the file.")
-        else:
-            print("Invalid input. Did not overwrite the file.")
+def send_cmd(cmd, filename, rtpClientSocket):
+    rtpClientSocket.sendall(bytes(cmd, "ascii"))
+    fta_lib.send_int(rtpClientSocket, len(filename))
+    rtpClientSocket.sendall(bytes(filename, "ascii"))
+    return recv_exact(rtpClientSocket, CHECK_LEN).decode("ascii")
+
+
+def request_file(filename, rtpClientSocket):
+    # Check if file already exists.
+    if os.path.exists(filename):
+        if not fta_lib.yn_prompt("This file already exists, do you want to overwrite it?"):
+            print("Okay. Will not request the file.")
+            return
+        print("Okay. Going to overwrite the file.")
+
+    # Tell server we are requesting a file.
+    check = send_cmd(GET, filename, rtpClientSocket)
+    if check == FILE_NOT_FOUND:
+        print("Sorry, this file does not appear to exist on the server.")
         return
 
-    with open(filename, 'wb') as out:
-        out.write(dataset)
-    print("Successfully downloaded " + str(filename) + " from server.")
+    # Download the file.
+    start_time = time.time()
+    fta_lib.recv_file(filename, rtpClientSocket)
+    print(f"Successfully downloaded {filename} in {time.time() - start_time} seconds.")
 
-def send_file(filename):
-    if(os.path.exists(filename)):
-        # Need to tell server we are going to send file to server
-        send_generic(rtpClientSocket, bytearray("post " + str(filename),'utf8'))
-        with open(filename, 'rb') as f:
-            fileBytes = f.read()
 
-        # Sending Length of file in bytes to server
-        send_generic(rtpClientSocket, len(fileBytes).to_bytes(5, byteorder='little'))
-        check = recv_generic(rtpClientSocket, 12, decode_data=True)
-
-        # File exists on server.
-        if(check == 'FILEEXISTS'):
-            while check != 'y' and check != 'n':
-                check = input('This file already exists on the server; do you want to overwrite it? [y,n]: ')
-        else:
-            check = 'y'
-
-        send_generic(rtpClientSocket, bytes(check, 'utf8'))
-
-        if (check == 'y'):
-            # Send chunks of 1024 bytes to server
-            for b in chunks_from_file(filename):
-                if(b != -1):
-                    rtpClientSocket.sendall(b)
-
-            print(filename + " has been sent to server.")
-        elif(check == 'n'):
-            print('Okay. Will not send this file.')
-        else:
-            send_generic(rtpClientSocket, b'n')
-            print('Invalid Input. Did not send file.')
-    else:
+def send_file(filename, rtpClientSocket):
+    # Check if file already exists.
+    if not os.path.exists(filename):
         print("Sorry, this file does not appear to exist.")
+        return
 
-def chunks_from_file(filename, chunksize = 1024):
-    with open(filename, "rb") as f:
-        while True:
-            chunk = f.read(chunksize)
-            if chunk:
-                yield chunk
-            else:
-                yield -1
+    # Tell server we are sending a file.
+    check = send_cmd(POST, filename, rtpClientSocket)
+    if check == FILE_FOUND:
+        print("This file already exists on the server.")
+        if not fta_lib.yn_prompt("Are you sure you want to overwrite it?"):
+            print("Ok, post cancelled.")
+            rtpClientSocket.sendall(bytes(REJECT, "ascii"))
+            return
+        rtpClientSocket.sendall(bytes(CONFIRM, "ascii"))
+
+    start_time = time.time()
+    fta_lib.send_file(filename, rtpClientSocket)
+    print(f"Successfully uploaded {filename} in {time.time() - start_time} seconds.")
+
+
+def handle_command(command, commandInput, rtpClientSocket, real):
+    commandArg = None
+    if len(commandInput) > 1 and len(commandInput[1]) > 0:
+        commandArg = commandInput[1]
+
+    if command == "get":
+        if commandArg is None:
+            print("get command must be followed by a filename. Please try again.")
+        else:
+            print(f"Requesting file: {commandArg}")
+            request_file(commandArg, rtpClientSocket)
+    elif command == "post":
+        if commandArg is None:
+            print("post command must be followed by a filename. Please try again.")
+        else:
+            print(f"Sending file: {commandArg}")
+            send_file(commandArg, rtpClientSocket)
+    elif command == "window":
+        if commandArg is None:
+            print("window command must be followed by an integer number of segments. Please try again.")
+        else:
+            try:
+                commandArg = int(commandArg)
+            except (ValueError, TypeError):
+                print("window command must be followed by an integer number of segments. Please try again.")
+                return
+
+            if commandArg <= 0 or commandArg >= 65535:
+                print("invalid window size, must be between 0 and 65535 exclusive.")
+                return
+
+            try:
+                print(f"Setting window: {commandArg} segments")
+                fta_lib.set_window(commandArg, rtpClientSocket, real)
+            except ValueError as e:
+                print(repr(e))
+
+
+def main(IP, port, debug, real):
+    fta_lib.configure_logger(debug)
+
+    # Command loop.
+    rtpClientSocket = None
+    connected = False
+    valid_commands = ["connect", "get", "post", "window", "disconnect", "exit"]
+    while True:
+
+        # Create socket
+        if rtpClientSocket is None:
+            rtpClientSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM) if real else rtp_socket.rtp_socket()
+
+        try:
+            commandInput = input(
+                """
+Enter a command on FTA client -
+[connect, get, post, window, disconnect, exit]: """
+            )
+            commandInput = commandInput.split(" ")
+            command = commandInput[0].lower()
+
+            if command not in valid_commands:
+                print("That was not valid. Please enter a valid command.")
+            elif command == "connect":
+                connected = connect(IP, port, rtpClientSocket, connected)
+            elif command == "disconnect":
+                connected = disconnect(rtpClientSocket, connected, printError=True)
+            elif command == "exit":
+                connected = disconnect(rtpClientSocket, connected)
                 break
+            elif not connected:
+                print("Not connected to FTP-Server. Please connect first.")
+            else:
+                handle_command(command, commandInput, rtpClientSocket, real)
+        except KeyboardInterrupt:
+            break
+        except BrokenPipeError:
+            print("The connection with the server has been reset.")
+            connected = disconnect(rtpClientSocket, connected)
+            print("Please reconnect.")
+        except:
+            connected = disconnect(rtpClientSocket, connected)
+            print("Something went wrong while talking to the server.")
+            print("You have been disconnected.")
+            print("--------------------------------------")
+            print(str(sys.exc_info()[1]))
+            traceback.print_exc()
+            print("--------------------------------------")
+            break
 
-def set_window(newSize):
-    rtpClientSocket.set_window_size(newSize)
+        # Must be re-created on disconnect because RTP doesn't support reusing closed sockets.
+        rtpClientSocket = None if not connected else rtpClientSocket
 
-    print('New window size set to: ' + str(newSize))
 
-def disconnect():
-    # Disconnect from the server
-    send_generic(rtpClientSocket, bytearray("disconnect", 'utf8'))
-    rtpClientSocket.close()
-
-    print('Disconnected...')
-
-def recv_generic(con, recv_size, decode_data=False):
-    # A byte value of 4 will be the end of message character.
-    data = bytearray()
-    while 4 not in data:
-        data += con.recv(recv_size)
-    return data[:data.index(4)] if not decode_data else data[:data.index(4)].decode('utf8')
-
-def send_generic(con, data):
-    # Append a byte value of 4 to signal end of data.
-    data += bytearray([4])
-    con.sendall(data)
-
-if __name__ == '__main__':
+if __name__ == "__main__":
 
     art = '''
 
-88888888888  888888888888    db                   ,ad8888ba,   88  88                                   
-88                88        d88b                 d8"'    `"8b  88  ""                            ,d     
-88                88       d8'`8b               d8'            88                                88     
-88aaaaa           88      d8'  `8b              88             88  88   ,adPPYba,  8b,dPPYba,  MM88MMM  
-88"""""           88     d8YaaaaY8b   aaaaaaaa  88             88  88  a8P_____88  88P'   `"8a   88     
-88                88    d8""""""""8b  """"""""  Y8,            88  88  8PP"""""""  88       88   88     
-88                88   d8'        `8b            Y8a.    .a8P  88  88  "8b,   ,aa  88       88   88,    
-88                88  d8'          `8b            `"Y8888Y"'   88  88   `"Ybbd8"'  88       88   "Y888  
-                                                                                                       '''
-
-    # Parse IP and Port arguments.
-    debug = False
-    if (len(sys.argv) > 2):
-        try:
-            IP = sys.argv[1]
-            port = int(sys.argv[2])
-        except:
-            print("Usage: python3 FTA-client.py <IP> <port>")
-            print("-d flag sets DEBUG mode on")
-            sys.exit()
-    else:
-        print("Port and IP not given together. Auto set to 8080 and 128.61.12.27")
-        port = 8080
-        IP = "127.0.1.1"
-        debug = True
-
-    for arg in sys.argv:
-        if arg == '-d':
-            debug = True
-
-    # Create socket.
-    rtpClientSocket = rtp_socket.rtp_socket(IPv6=False, debug=debug)
-    # rtpClientSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    isConnected = False
-    finished = False
+    88888888888  888888888888    db                   ,ad8888ba,   88  88
+    88                88        d88b                 d8"'    `"8b  88  ""                            ,d
+    88                88       d8'`8b               d8'            88                                88
+    88aaaaa           88      d8'  `8b              88             88  88   ,adPPYba,  8b,dPPYba,  MM88MMM
+    88"""""           88     d8YaaaaY8b   aaaaaaaa  88             88  88  a8P_____88  88P'   `"8a   88
+    88                88    d8""""""""8b  """"""""  Y8,            88  88  8PP"""""""  88       88   88
+    88                88   d8'        `8b            Y8a.    .a8P  88  88  "8b,   ,aa  88       88   88,
+    88                88  d8'          `8b            `"Y8888Y"'   88  88   `"Ybbd8"'  88       88   "Y888
+                                                                                                        '''
 
     print(art)
-
-    while not finished:
-        commandInput = input('Enter a command on FTA client - \n[connect, get, post, window, disconnect, exit]: ')
-        commandInput = commandInput.split(' ')
-        command = commandInput[0]
-        commandArg = None
-
-        if len(commandInput) > 1:
-            commandArg = commandInput[1]
-
-        if command == 'connect':
-            if not isConnected:
-                isConnected = connect(IP, port)
-            else:
-                print("You are already connected to FTA-Server.")
-        elif command == 'get' and isConnected:
-            if commandArg == None:
-                print("get command must be followed by a filename. Please try again.")
-            else:
-                print("Requesting file: " + str(commandArg))
-                receive_file(commandArg)
-        elif command == 'post' and isConnected:
-            if commandArg == None:
-                print("post command must be followed by a filename. Please try again.")
-            else:
-                print("Sending file: " + str(commandArg))
-                send_file(commandArg)
-        elif command == 'window' and isConnected:
-            if commandArg == None:
-                print("window command must be followed by an integer. Please try again.")
-            else:
-                try:
-                    commandArg = int(commandArg)
-                except:
-                    print("window command must be followed by an integer. Please try again.")
-                    commandArg = None
-
-                if commandArg != None:
-                    print("Setting window: " + str(commandArg))
-                    set_window(commandArg)
-        elif command == 'disconnect' and isConnected:
-            isConnected = False
-            disconnect()
-        elif command == 'exit':
-            if isConnected:
-                disconnect()
-            print ("Exiting...")
-            finished = True
-        elif not isConnected:
-            print ("Currently not connected. Please connect.")
-        else:
-            print('That was not valid. Please enter a valid command.')
-
+    parser = argparse.ArgumentParser(prog="FTA-client", description="Runs a file transfer client.")
+    parser.add_argument("ip", action="store", nargs="?", type=str, help="the IP address of the server")
+    parser.add_argument("port", action="store", nargs="?", type=int, help="the port of the server")
+    parser.add_argument("-d", "--debug", action="store_true", help="prints debug outputs")
+    parser.add_argument("-r", "--real", action="store_true", help="use real TCP instead of RTP")
+    args = parser.parse_args()
+    args.port = args.port if args.port else 8080
+    args.ip = args.ip if args.ip else "127.0.0.1"
+    main(args.ip, args.port, args.debug, args.real)
     print("\n\nThank you for using FTA-Client!")
     print("- Sid Senthilkumar & Ashika Ganesh")
