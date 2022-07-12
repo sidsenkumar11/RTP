@@ -1,8 +1,15 @@
-from shared.fta_lib import CHECK_LEN, GET, POST, CONFIRM, REJECT, FILE_FOUND, FILE_NOT_FOUND
-from shared import rtp_socket
-from shared import fta_lib
-import sys
+import argparse
 import os
+import sys
+import time
+import traceback
+
+sys.path.append("..")
+sys.path.append(".")
+
+from shared import fta_lib, rtp_socket
+from shared.fta_lib import CHECK_LEN, CONFIRM, FILE_FOUND, FILE_NOT_FOUND, GET, POST, REJECT, recv_exact
+
 
 def connect(IP, port, rtpClientSocket, connected):
     if connected:
@@ -10,15 +17,13 @@ def connect(IP, port, rtpClientSocket, connected):
         return True
 
     try:
-        rtpClientSocket.connect((IP,port))
+        rtpClientSocket.connect((IP, port))
         print(f"Connection successful to: {IP}:{port}")
         return True
     except ConnectionRefusedError as e:
         print(repr(e))
         return False
-    except:
-        print("Could not connect to server.")
-        return False
+
 
 def disconnect(rtpClientSocket, connected, printError=False):
     if not connected:
@@ -31,11 +36,13 @@ def disconnect(rtpClientSocket, connected, printError=False):
     print("Disconnected.")
     return False
 
+
 def send_cmd(cmd, filename, rtpClientSocket):
     rtpClientSocket.sendall(bytes(cmd, "ascii"))
     fta_lib.send_int(rtpClientSocket, len(filename))
     rtpClientSocket.sendall(bytes(filename, "ascii"))
-    return rtpClientSocket.recv(CHECK_LEN).decode("ascii")
+    return recv_exact(rtpClientSocket, CHECK_LEN).decode("ascii")
+
 
 def request_file(filename, rtpClientSocket):
     # Check if file already exists.
@@ -52,8 +59,10 @@ def request_file(filename, rtpClientSocket):
         return
 
     # Download the file.
+    start_time = time.time()
     fta_lib.recv_file(filename, rtpClientSocket)
-    print(f"Successfully downloaded {filename} from server.")
+    print(f"Successfully downloaded {filename} in {time.time() - start_time} seconds.")
+
 
 def send_file(filename, rtpClientSocket):
     # Check if file already exists.
@@ -70,63 +79,76 @@ def send_file(filename, rtpClientSocket):
             rtpClientSocket.sendall(bytes(REJECT, "ascii"))
             return
         rtpClientSocket.sendall(bytes(CONFIRM, "ascii"))
+
+    start_time = time.time()
     fta_lib.send_file(filename, rtpClientSocket)
+    print(f"Successfully uploaded {filename} in {time.time() - start_time} seconds.")
+
 
 def handle_command(command, commandInput, rtpClientSocket, real):
     commandArg = None
     if len(commandInput) > 1 and len(commandInput[1]) > 0:
         commandArg = commandInput[1]
 
-    if command == 'get':
+    if command == "get":
         if commandArg is None:
             print("get command must be followed by a filename. Please try again.")
         else:
             print(f"Requesting file: {commandArg}")
             request_file(commandArg, rtpClientSocket)
-    elif command == 'post':
+    elif command == "post":
         if commandArg is None:
             print("post command must be followed by a filename. Please try again.")
         else:
             print(f"Sending file: {commandArg}")
             send_file(commandArg, rtpClientSocket)
-    elif command == 'window':
-        try:
-            commandArg = int(commandArg)
-        except (ValueError, TypeError):
-            print("window command must be followed by an integer. Please try again.")
+    elif command == "window":
+        if commandArg is None:
+            print("window command must be followed by an integer number of segments. Please try again.")
+        else:
+            try:
+                commandArg = int(commandArg)
+            except (ValueError, TypeError):
+                print("window command must be followed by an integer number of segments. Please try again.")
 
-        try:
-            print(f"Setting window: {commandArg}")
-            fta_lib.set_window(commandArg, rtpClientSocket, real)
-        except ValueError as e:
-            print(repr(e))
+            try:
+                print(f"Setting window: {commandArg} segments")
+                fta_lib.set_window(commandArg, rtpClientSocket, real)
+            except ValueError as e:
+                print(repr(e))
+
 
 def main(IP, port, debug, real):
+    fta_lib.configure_logger(debug)
+
     # Create socket.
     if real:
         import socket
+
         rtpClientSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     else:
-        rtpClientSocket = rtp_socket.rtp_socket(IPv6=False, debug=debug)
+        rtpClientSocket = rtp_socket.rtp_socket()
 
     # Command loop.
     connected = False
     valid_commands = ["connect", "get", "post", "window", "disconnect", "exit"]
     while True:
         try:
-            commandInput = input("""
+            commandInput = input(
+                """
 Enter a command on FTA client -
-[connect, get, post, window, disconnect, exit]: """)
-            commandInput = commandInput.split(' ')
+[connect, get, post, window, disconnect, exit]: """
+            )
+            commandInput = commandInput.split(" ")
             command = commandInput[0].lower()
 
             if command not in valid_commands:
                 print("That was not valid. Please enter a valid command.")
-            elif command == 'connect':
+            elif command == "connect":
                 connected = connect(IP, port, rtpClientSocket, connected)
-            elif command == 'disconnect':
+            elif command == "disconnect":
                 connected = disconnect(rtpClientSocket, connected, printError=True)
-            elif command == 'exit':
+            elif command == "exit":
                 connected = disconnect(rtpClientSocket, connected)
                 break
             elif not connected:
@@ -143,13 +165,14 @@ Enter a command on FTA client -
             connected = disconnect(rtpClientSocket, connected)
             print("Something went wrong while talking to the server.")
             print("You have been disconnected.")
-            print('--------------------------------------')
+            print("--------------------------------------")
             print(str(sys.exc_info()[1]))
-            print('--------------------------------------')
-            print('Restarting...')
+            traceback.print_exc()
+            print("--------------------------------------")
+            break
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
 
     art = '''
 
@@ -163,29 +186,15 @@ if __name__ == '__main__':
     88                88  d8'          `8b            `"Y8888Y"'   88  88   `"Ybbd8"'  88       88   "Y888
                                                                                                         '''
 
-    # Parse IP and Port arguments.
-    debug = False
-    if (len(sys.argv) > 2):
-        try:
-            IP = sys.argv[1]
-            port = int(sys.argv[2])
-        except:
-            print("Usage: python3 FTA-client.py <IP> <port>")
-            print("-d flag sets DEBUG mode on")
-            sys.exit()
-    else:
-        print("Port and IP not given together. Auto set to 8080 and 128.61.12.27")
-        port = 8080
-        IP = "127.0.1.1"
-        debug = True
-
-    real = False
-    for arg in sys.argv:
-        if arg == '-d':
-            debug = True
-            real = True
-
     print(art)
-    main(IP, port, debug, real)
+    parser = argparse.ArgumentParser(prog="FTA-client", description="Runs a file transfer client.")
+    parser.add_argument("ip", action="store", nargs="?", type=str, help="the IP address of the server")
+    parser.add_argument("port", action="store", nargs="?", type=int, help="the port of the server")
+    parser.add_argument("-d", "--debug", action="store_true", help="prints debug outputs")
+    parser.add_argument("-r", "--real", action="store_true", help="use real TCP instead of RTP")
+    args = parser.parse_args()
+    args.port = args.port if args.port else 8080
+    args.ip = args.ip if args.ip else "127.0.0.1"
+    main(args.ip, args.port, args.debug, args.real)
     print("\n\nThank you for using FTA-Client!")
     print("- Sid Senthilkumar & Ashika Ganesh")

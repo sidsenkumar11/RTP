@@ -1,20 +1,24 @@
-from shared.fta_lib import GET, POST, REJECT, FILE_FOUND, FILE_NOT_FOUND
-from shared.fta_lib import CHECK_LEN, COMMAND_LEN
-import shared.rtp_socket as rtp_socket
-import shared.fta_lib as fta_lib
 import argparse
 import os
 import sys
 import threading
+
+sys.path.append("..")
+sys.path.append(".")
+
+import shared.fta_lib as fta_lib
+import shared.rtp_socket as rtp_socket
+from shared.fta_lib import CHECK_LEN, COMMAND_LEN, FILE_FOUND, FILE_NOT_FOUND, GET, POST, REJECT, recv_exact
+
 
 def exec_commands(con, addr, connections, run_event):
     try:
         # stop listening for commands on ctrl+c
         while run_event.is_set():
             # get command and length of filename
-            command = con.recv(COMMAND_LEN).decode('ascii')
+            command = recv_exact(con, COMMAND_LEN).decode("ascii")
             filename_len = fta_lib.recv_int(con)
-            filename = con.recv(filename_len).decode('ascii')
+            filename = recv_exact(con, filename_len).decode("ascii")
 
             # file server command
             if command == GET:
@@ -22,27 +26,29 @@ def exec_commands(con, addr, connections, run_event):
             elif command == POST:
                 recv_file(filename, con)
             else:
-                print("Disconnected.")
+                print("Disconnected.", command, filename_len, filename)
                 break
     except TimeoutError:
         print("Timed out.")
     finally:
         con.close()
-        del(connections[addr])
+        del connections[addr]
         print("Connection closed.")
+
 
 def recv_file(filename, con):
     if os.path.exists(filename):
-        con.sendall(bytes(FILE_FOUND, 'ascii'))
-        check = con.recvall(CHECK_LEN).decode('ascii')
+        con.sendall(bytes(FILE_FOUND, "ascii"))
+        check = recv_exact(con, CHECK_LEN).decode("ascii")
         if check == REJECT:
             print("Client cancelled file upload.")
             return
     else:
-        con.sendall(bytes(FILE_NOT_FOUND, 'ascii'))
+        con.sendall(bytes(FILE_NOT_FOUND, "ascii"))
 
     fta_lib.recv_file(filename, con)
     print("File uploaded to server.")
+
 
 def send_file(filename, con):
     if not os.path.exists(filename):
@@ -53,16 +59,18 @@ def send_file(filename, con):
     fta_lib.send_file(filename, con)
     print(f"{filename} has been sent to client.")
 
+
 def main(port, debug, real):
     fta_lib.configure_logger(debug)
 
     # Bind and listen to socket.
     if real:
         import socket
+
         rtpServerSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     else:
-        rtpServerSocket = rtp_socket.rtp_socket(IPv6=False, debug=debug)
-    rtpServerSocket.bind(('', port))
+        rtpServerSocket = rtp_socket.rtp_socket()
+    rtpServerSocket.bind(("", port))
     rtpServerSocket.listen(1)
     print(f"Listening on 0.0.0.0:{port}")
 
@@ -83,18 +91,19 @@ def main(port, debug, real):
         except KeyboardInterrupt:
             run_event.clear()
             for t in connections.values():
-                t.join(.1) # timeout if connection takes too long to finish
+                t.join(0.1)  # timeout if connection takes too long to finish
             break
         except:
             print("Something went wrong with client interaction.")
-            print('--------------------------------------')
+            print("--------------------------------------")
             print(str(sys.exc_info()[1]))
-            print('--------------------------------------')
+            print("--------------------------------------")
             break
 
     rtpServerSocket.close()
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
 
     art = '''
 
@@ -110,20 +119,10 @@ if __name__ == '__main__':
                                                                                                                             '''
     print(art)
 
-    parser = argparse.ArgumentParser(
-        prog="FTA-server",
-        description="Runs a file transfer server.")
-    parser.add_argument('port',
-        action='store',
-        nargs='?',
-        type=int,
-        help='the port to run the server on')
-    parser.add_argument('-d', '--debug',
-        action='store_true',
-        help='prints debug outputs')
-    parser.add_argument('-r', '--real',
-        action='store_true',
-        help='use real TCP instead of RTP')
+    parser = argparse.ArgumentParser(prog="FTA-server", description="Runs a file transfer server.")
+    parser.add_argument("port", action="store", nargs="?", type=int, help="the port to run the server on")
+    parser.add_argument("-d", "--debug", action="store_true", help="prints debug outputs")
+    parser.add_argument("-r", "--real", action="store_true", help="use real TCP instead of RTP")
     args = parser.parse_args()
     args.port = args.port if args.port else 8080
     main(args.port, args.debug, args.real)

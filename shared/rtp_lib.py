@@ -1,7 +1,12 @@
-from collections import namedtuple
-from struct import pack, unpack
+import binascii
+import logging
 import math
 import socket
+from collections import namedtuple
+from struct import pack, unpack
+
+_logger = logging.getLogger(__name__)
+
 
 """
 -----------------------------------
@@ -43,29 +48,29 @@ application data that can be sent in a single frame is 1472 bytes.
 """
 
 # Ethernet / IP / UDP Sizes
-MAX_FRAME_SIZE         = 1518
-FRAME_HEADER_SIZE      = 18
-MAX_FRAME_DATA_SIZE    = MAX_FRAME_SIZE - FRAME_HEADER_SIZE
-IP_HEADER_SIZE         = 20
-UDP_HEADER_SIZE        = 8
+MAX_FRAME_SIZE = 1518
+FRAME_HEADER_SIZE = 18
+MAX_FRAME_DATA_SIZE = MAX_FRAME_SIZE - FRAME_HEADER_SIZE
+IP_HEADER_SIZE = 20
+UDP_HEADER_SIZE = 8
 MAX_SAFE_UDP_DATA_SIZE = MAX_FRAME_DATA_SIZE - IP_HEADER_SIZE - UDP_HEADER_SIZE
 
 # RTP Sizes
-MAX_RTP_SEGMENT_SIZE   = MAX_SAFE_UDP_DATA_SIZE
-HEADER_SIZE            = 160
-MAX_DATA_PER_SEGMENT   = MAX_SAFE_UDP_DATA_SIZE - HEADER_SIZE
+MAX_RTP_SEGMENT_SIZE = MAX_SAFE_UDP_DATA_SIZE
+HEADER_SIZE = 160
+MAX_DATA_PER_SEGMENT = MAX_SAFE_UDP_DATA_SIZE - HEADER_SIZE
 
 # Max value of ACK is 2^32-1
 # ACK represents next expected sequence number,
 # so acknowledging 2^32-1 means we have received 2^32-2.
-MAX_ACK_VAL     = math.pow(2, 32) - 1
+MAX_ACK_VAL = math.pow(2, 32) - 1
 MAX_BUFFER_SIZE = MAX_ACK_VAL - 1
 MAX_WINDOW_SIZE = math.floor(MAX_BUFFER_SIZE / MAX_DATA_PER_SEGMENT)
 
 # In practice, our buffer and window will be much smaller.
-# We'll assume an initial 65536 byte application data buffer to match real TCP.
-INITIAL_BUFFER_SIZE = math.pow(2, 16)
-INITIAL_WINDOW_SIZE = math.floor(INITIAL_BUFFER_SIZE / MAX_DATA_PER_SEGMENT)
+# We'll assume a default 65536 byte application data buffer to match real TCP.
+DEFAULT_BUFFER_SIZE = math.pow(2, 16)
+DEFAULT_WINDOW_SIZE = math.floor(DEFAULT_BUFFER_SIZE / MAX_DATA_PER_SEGMENT)
 
 Segment = namedtuple("Segment", "src_port dest_port seq_num ack_num special_bits window checksum data_size data")
 
@@ -75,23 +80,26 @@ def checksum(bytearray):
     for byte in bytearray:
         checksum = (checksum >> 1) + ((checksum & 1) << 15)
         checksum += byte
-        checksum &= 0xffff
+        checksum &= 0xFFFF
     return checksum
 
+
 # Data must be a bytearray.
-def create_segment(source_port, destination_port, sequence_num, ack_num, window, data_size, data, syn=False, ack=False, fin=False):
+def create_segment(src_port, dest_port, seq_num, ack_num, window, data=b"", syn=False, ack=False, fin=False, win=False):
 
     # Create reserved + special bits number
     special_bits = 0
     if fin:
-        special_bits = special_bits + int('1', 2)
+        special_bits |= 0b1
     if syn:
-        special_bits = special_bits + int('10', 2)
+        special_bits |= 0b10
     if ack:
-        special_bits = special_bits + int('100', 2)
+        special_bits |= 0b100
+    if win:
+        special_bits |= 0b1000
 
     # Create initial segment with checksum of 0.
-    segment = pack("!HHLLHHHH", source_port, destination_port, sequence_num, ack_num, special_bits, window, 0, data_size)
+    segment = pack("!HHLLHHHH", src_port, dest_port, seq_num, ack_num, special_bits, window, 0, len(data))
     segment = bytearray(segment)
     segment = segment + data
     checksum_data = bytearray(pack("H", len(segment))) + segment
@@ -100,19 +108,30 @@ def create_segment(source_port, destination_port, sequence_num, ack_num, window,
     real_checksum = checksum(checksum_data)
 
     # Segment = Segment with correct checksum + data
-    segment = pack("!HHLLHHHH", source_port, destination_port, sequence_num, ack_num, special_bits, window, real_checksum, data_size)
+    segment = pack(
+        "!HHLLHHHH",
+        src_port,
+        dest_port,
+        seq_num,
+        ack_num,
+        special_bits,
+        window,
+        real_checksum,
+        len(data),
+    )
     segment = segment + data
 
     # print("Segment Contents: " + str(binascii.hexlify(segment)))
     # print("Real checksum   : " + str(real_checksum))
     return segment
 
+
 # Parses a bytearray segment from data buffer.
 def read_segment(buffer):
 
     # Get segment from buffer
-    data_length = int.from_bytes(buffer[18:20], byteorder='big')
-    segment = buffer[:20 + data_length]
+    data_length = int.from_bytes(buffer[18:20], byteorder="big")
+    segment = buffer[: 20 + data_length]
 
     # Parse fields
     header = unpack("!HHLLHHHH", segment[:20])
@@ -127,32 +146,33 @@ def read_segment(buffer):
     real_checksum = checksum(orig_checksum_data)
 
     if desired_checksum != real_checksum:
-        # print("Transmission error")
+        _logger.info(f"Transmission error: \n{binascii.hexlify(segment)}\n{binascii.hexlify(orig_segment)}")
         return None
     else:
-        pass
-        # print("Checksum matches!")
+        _logger.debug("Checksum matches!")
 
     return Segment(header[0], header[1], header[2], header[3], header[4], header[5], header[6], header[7], data)
 
-# Parses a header.
-def read_header(buffer):
-    return unpack("!HHLLHHHH", segment)
 
-# Returns this machine's IP address.
-def get_IP():
-    return socket.gethostbyname(socket.gethostname())
-
-if __name__ == '__main__':
+if __name__ == "__main__":
 
     # Testing segment creation and reading.
 
     # Data array is simply list of 12 bytes containing 0...11
-    data_array = bytearray([])
-    for i in range(0, 12):
-        data_array.append(i)
+    data = bytearray([])
+    for i in range(12):
+        data.append(i)
 
     # Segment created,
-    segment = create_segment(source_port=80, destination_port=20, sequence_num=123, ack_num=456, window=789, data_size=12, data=bytearray(data_array), syn = True)
+    segment = create_segment(
+        src_port=80,
+        dest_port=20,
+        seq_num=123,
+        ack_num=456,
+        window=789,
+        data=data,
+        syn=True,
+    )
+
     print("Created Segment: " + str(binascii.hexlify(segment)))
     print("Parsed Segment : " + str(read_segment(segment)))

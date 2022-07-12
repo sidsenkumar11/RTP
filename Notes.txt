@@ -31,3 +31,6 @@ Test invalid window size exception
 Remove traversal of directory to RTP in FTA server/client
 
 Make sure server fails properly (uncomment try/catch in FTA)
+
+Adaptively modify window_size based on how quickly data is being consumed from the appdata_recv_buffer
+    - Requires a limit on the appdata_recv_buffer size?
