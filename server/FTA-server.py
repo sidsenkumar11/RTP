@@ -1,5 +1,6 @@
 import argparse
 import os
+import socket
 import sys
 import threading
 
@@ -26,10 +27,12 @@ def exec_commands(con, addr, connections, run_event):
             elif command == POST:
                 recv_file(filename, con)
             else:
-                print("Disconnected.", command, filename_len, filename)
+                print("Disconnected.")
                 break
     except TimeoutError:
         print("Timed out.")
+    except ConnectionRefusedError:
+        print("Disconnected.")
     finally:
         con.close()
         del connections[addr]
@@ -64,14 +67,9 @@ def main(port, debug, real):
     fta_lib.configure_logger(debug)
 
     # Bind and listen to socket.
-    if real:
-        import socket
-
-        rtpServerSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    else:
-        rtpServerSocket = rtp_socket.rtp_socket()
+    rtpServerSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM) if real else rtp_socket.rtp_socket()
     rtpServerSocket.bind(("", port))
-    rtpServerSocket.listen(1)
+    rtpServerSocket.listen(2)
     print(f"Listening on 0.0.0.0:{port}")
 
     # State information for multi-threaded server.

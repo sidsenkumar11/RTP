@@ -1,5 +1,6 @@
 import argparse
 import os
+import socket
 import sys
 import time
 import traceback
@@ -121,18 +122,16 @@ def handle_command(command, commandInput, rtpClientSocket, real):
 def main(IP, port, debug, real):
     fta_lib.configure_logger(debug)
 
-    # Create socket.
-    if real:
-        import socket
-
-        rtpClientSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    else:
-        rtpClientSocket = rtp_socket.rtp_socket()
-
     # Command loop.
+    rtpClientSocket = None
     connected = False
     valid_commands = ["connect", "get", "post", "window", "disconnect", "exit"]
     while True:
+
+        # Create socket
+        if rtpClientSocket is None:
+            rtpClientSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM) if real else rtp_socket.rtp_socket()
+
         try:
             commandInput = input(
                 """
@@ -170,6 +169,9 @@ Enter a command on FTA client -
             traceback.print_exc()
             print("--------------------------------------")
             break
+
+        # Must be re-created on disconnect because RTP doesn't support reusing closed sockets.
+        rtpClientSocket = None if not connected else rtpClientSocket
 
 
 if __name__ == "__main__":

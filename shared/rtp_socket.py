@@ -19,7 +19,7 @@ from shared.rtp_lib import (
 # Connection constants.
 SEND_ACK_TIMEOUT = 10  # Seconds before send() times out due to not receiving ACKs.
 RECV_TIMEOUT = 0.5  # Seconds before recv() times out
-BUFFERING_THREAD_TIMEOUT = 4  # Seconds before the buffering thread wakes up to check if it should die
+BUFFERING_THREAD_TIMEOUT = 2  # Seconds before the buffering thread wakes up to check if it should die
 HANDSHAKE_TIMEOUT = 3
 MAX_ATTEMPTS = 3  # Before failed to send/receive in connection
 MAX_CONNECTIONS = 3  # Before refusing connections
@@ -33,13 +33,14 @@ class rtp_socket:
         UNINITIALIZED = 0
         LISTENING = 1
         CONNECTION = 2
+        CLOSED = 3
 
-    def __init__(self, window_size=DEFAULT_WINDOW_SIZE):
+    def __init__(self):
         """Creates a virtual TCP socket ready to be used as a client or server."""
 
         # Create underlying UDP socket and buffers.
         self.s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self.window_size = window_size
+        self.window_size = DEFAULT_WINDOW_SIZE
         self.appdata_recv_buffer = bytearray([])
 
         # Connection state
@@ -54,6 +55,8 @@ class rtp_socket:
         self.appdata_cond = threading.Condition()
         self.recv_ack_cond = threading.Condition()
         self.buffering_thread = None
+        self.waiting_for_fin_ack = False
+        self.received_fin_ack = False
 
         # Server state
         self.max_connections = MAX_CONNECTIONS
@@ -69,54 +72,67 @@ class rtp_socket:
         # Create underlying UDP socket and buffers.
         self.s = udp_socket
         self.window_size = window_size
-        self.appdata_recv_buffer = bytearray([])
 
         # Connection state.
         self.src_ip = src_ip
         self.src_port = src_port
         self.dest_ip = dest_ip
         self.dest_port = dest_port
-        self.seq_num = 0
-        self.ack_num = 0
-        self.last_ack_received = 0
         self.type = rtp_socket.socket_type.CONNECTION
-        self.appdata_cond = threading.Condition()
-        self.recv_ack_cond = threading.Condition()
-        self.buffering_thread = None
 
     def close(self):
-        """Closes the socket and/or connection."""
+        """Closes the socket and any associated connections. A closed socket cannot be reopened."""
 
-        if self.type == rtp_socket.socket_type.UNINITIALIZED:
+        if self.type == rtp_socket.socket_type.UNINITIALIZED or self.type == rtp_socket.socket_type.CLOSED:
             return
 
-        # TODO: Releases resoures associated with connection
-        _logger.info("Closing connection...")
+        if self.type == rtp_socket.socket_type.LISTENING:
+            _logger.info("Closing listening socket")
+            self._free_resources()
+            _logger.info("Listening socket closed!")
+            return
 
-        if self.dest_ip != None and self.dest_port != None:
-            _logger.info("Send FIN packet")
+        # Connection socket
+        _logger.info("Closing connection socket")
+        fin_seg = create_segment(
+            self.src_port,
+            self.dest_port,
+            self.seq_num,
+            self.ack_num,
+            self.window_size,
+            fin=True,
+            ack=True,
+        )
 
-        # Close any listening threads
-        # self.buffering_thread = None
-        # self.appdata_recv_buffer = bytearray([])
+        self.waiting_for_fin_ack = True
+        for i in range(MAX_ATTEMPTS):
+            if self.received_fin_ack:
+                _logger.info("Destination acknowledged with FIN/ACK, closing client connection")
+                break
 
-        # Server socket cleanup - careful; these might get called after every client exits!
-        # self.connection_queue = []
-        # self.connections = {}
-        # self.syned_clients = set()
+            _logger.info(f"Sending FIN. Attempt {i+1} for {(self.dest_ip, self.dest_port)}")
+            self.s.sendto(fin_seg, (self.dest_ip, self.dest_port))
+            time.sleep(HANDSHAKE_TIMEOUT)
+        else:
+            _logger.info("Server did not respond with FIN/ACK in time. Closing connection locally.")
 
-        # Free buffers and reset variables.
-        # self.ack_num = 0
-        # self.src_ip = ''
-        # self.src_port = 0
-        # self.dest_ip = ''
-        # self.dest_port = 0
-        # self.seq_num = 0
-        # self.ack_num = 0
-        # self.last_ack_received = 0
-        # self.type = rtp_socket.socket_type.UNINITIALIZED
-        # self.window_size = 0
-        _logger.info("Connection closed!")
+        # Releases resoures associated with connection
+        self._free_resources()
+
+    def _free_resources(self):
+        """Client and Server: Frees resources for closing socket."""
+        for connection in self.connections.values():
+            connection.close()
+
+        self.buffering_thread = None
+        self.type = rtp_socket.socket_type.CLOSED
+        self.appdata_recv_buffer = bytearray([])
+
+        # Server resources
+        self.connections = {}
+        self.connections_queue = []
+        self.syned_clients = set()
+        _logger.info("Freed resources!")
 
     # ------------------------------------------
     # SERVER
@@ -124,6 +140,8 @@ class rtp_socket:
 
     def check_valid_server_socket(self, should_be_unbound=True, should_be_listening=False):
         """Validates socket is allowed to listen or accept connections."""
+        if self.type == rtp_socket.socket_type.CLOSED:
+            raise ConnectionRefusedError("Socket has been closed and cannot be re-opened; please create a new socket")
         if should_be_unbound and self.src_port != None:
             raise ConnectionRefusedError("Socket cannot be rebound")
         if not should_be_listening and self.type == rtp_socket.socket_type.LISTENING:
@@ -176,9 +194,8 @@ class rtp_socket:
                 _logger.info("Received a corrupted packet. Segment dropped.")
                 continue
 
+            # Send data to appropriate connection
             if client_addr in self.connections:
-                # TODO: Not sure if client needs this flag when closing connections
-                # Send data to appropriate connection
                 _logger.info("Buffering data for known client")
                 con = self.connections[client_addr]
                 con._buffer_segment(segment, client_addr)
@@ -186,14 +203,13 @@ class rtp_socket:
 
             # TODO: Lock syned_clients usage
             if client_addr in self.syned_clients:
-                # TODO: Not sure if client needs this flag when closing connections
                 _logger.info("Client address is one that recently SYNed the server.")
                 if segment.special_bits != 0x4:
                     _logger.info("Received response to SYN/ACK segment without only ACK flag. Segment dropped.")
                     continue
 
                 _logger.info(f"Received ACK from {client_addr}. Connection established!")
-                con = rtp_socket(window_size=segment.window)
+                con = rtp_socket()
                 con._init_connection(
                     self.s, self.src_ip, self.src_port, client_addr[0], client_addr[1], self.window_size
                 )
@@ -208,6 +224,12 @@ class rtp_socket:
 
             else:
                 _logger.info("Received SYN from new client")
+
+                # Prune old connections
+                for old_client_addr in list(self.connections.keys()):
+                    con = self.connections[old_client_addr]
+                    if con.type == rtp_socket.socket_type.CLOSED:
+                        del self.connections[old_client_addr]
 
                 if len(self.connections) >= self.max_connections:
                     _logger.info("Reached max num connections. Segment dropped.")
@@ -226,7 +248,8 @@ class rtp_socket:
                 self.syned_clients.add(client_addr)
                 threading.Thread(target=self._complete_handshake, args=(client_addr,), daemon=True).start()
 
-        _logger.info("Exiting buffering thread")
+        _logger.info("Closing server receiver thread and socket")
+        self.s.close()
 
     def _complete_handshake(self, client_addr):
         """Server: This function should be run from a new thread upon receiving a client SYN. This function will send a SYN/ACK repeatedly until the client sends an ACK."""
@@ -263,12 +286,16 @@ class rtp_socket:
     def connect(self, dest_addr):
         """Client: Perform a 3-way handshake and set up client segment-receiver thread."""
 
+        if self.type == rtp_socket.socket_type.CLOSED:
+            raise ConnectionRefusedError("Socket has been closed and cannot be re-opened; please create a new socket")
+
         _logger.info("Initiating a connection...")
 
         # Bind to a random port.
         self.src_port = random.randint(1024, 65535)
         self.type = rtp_socket.socket_type.CONNECTION
         self.s.bind(("", self.src_port))
+        _logger.info(f"Client connecting from port: {self.src_port}")
 
         # Set destination information.
         self.dest_ip = dest_addr[0]
@@ -339,6 +366,9 @@ class rtp_socket:
                 continue
 
             self._buffer_segment(segment, client_addr)
+
+        _logger.info("Closing client receiver thread and socket")
+        self.s.close()
 
     def sendall(self, data):
         """Client: Sends all the given data through the connection using GBN Sliding Window protocol."""
@@ -453,13 +483,34 @@ class rtp_socket:
     def _buffer_segment(self, segment: Segment, client_addr):
         """Server and Client: Buffers a segment and notifies any recv() threads that new app data is available or any send() threads that a new ACK is available."""
 
-        # TODO: Client who wants to abruptly quit might not have ACK flag
         if segment.special_bits & 0x4 != 0x4:
             _logger.info("Received response segment without ACK flag. Segment dropped.")
             return
 
         if segment.data_size == 0:
             _logger.info("Received ACK segment with no data")
+
+            # Check if this is a FIN segment to close the connection.
+            if segment.special_bits & 0x1 == 0x1:
+                _logger.info("Received request to terminate the connection")
+                self.received_fin_ack = True
+
+                # Only free resources and send an ACK if the close wasn't initiated by us.
+                if not self.waiting_for_fin_ack:
+                    self.s.sendto(
+                        create_segment(
+                            self.src_port,
+                            client_addr[1],
+                            self.seq_num,
+                            self.ack_num,
+                            self.window_size,
+                            ack=True,
+                            fin=True,
+                        ),
+                        client_addr,
+                    )
+                    self._free_resources()
+                return
 
             # Check if this is a WIN segment to update the window.
             if segment.special_bits & 0x8 == 0x8:
