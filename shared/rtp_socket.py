@@ -126,12 +126,17 @@ class rtp_socket:
 
         self.buffering_thread = None
         self.type = rtp_socket.socket_type.CLOSED
-        self.appdata_recv_buffer = bytearray([])
+
+        with self.appdata_cond:
+            self.appdata_recv_buffer = bytearray([])
 
         # Server resources
-        self.connections = {}
-        self.connections_queue = []
-        self.syned_clients = set()
+        with self.connections_cond:
+            self.connections = {}
+            self.connections_queue = []
+
+        with self.syned_clients_lock:
+            self.syned_clients = set()
         _logger.info("Freed resources!")
 
     # ------------------------------------------
@@ -201,7 +206,6 @@ class rtp_socket:
                 con._buffer_segment(segment, client_addr)
                 continue
 
-            # TODO: Lock syned_clients usage
             if client_addr in self.syned_clients:
                 _logger.info("Client address is one that recently SYNed the server.")
                 if segment.special_bits != 0x4:
@@ -213,7 +217,9 @@ class rtp_socket:
                 con._init_connection(
                     self.s, self.src_ip, self.src_port, client_addr[0], client_addr[1], self.window_size
                 )
-                self.syned_clients.remove(client_addr)
+
+                with self.syned_clients_lock:
+                    self.syned_clients.remove(client_addr)
 
                 # Notify the accept() thread that a new connection is available
                 with self.connections_cond:
@@ -245,7 +251,8 @@ class rtp_socket:
 
                 # Start a thread which keeps trying to send SYN/ACK until acknowledged.
                 _logger.info(f"Received SYN from {client_addr}; sending SYN/ACK")
-                self.syned_clients.add(client_addr)
+                with self.syned_clients_lock:
+                    self.syned_clients.add(client_addr)
                 threading.Thread(target=self._complete_handshake, args=(client_addr,), daemon=True).start()
 
         _logger.info("Closing server receiver thread and socket")
