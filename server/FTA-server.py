@@ -69,7 +69,7 @@ def main(port, debug, real):
     # Bind and listen to socket.
     rtpServerSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM) if real else rtp_socket.rtp_socket()
     rtpServerSocket.bind(("", port))
-    rtpServerSocket.listen(2)
+    rtpServerSocket.listen(4)
     print(f"Listening on 0.0.0.0:{port}")
 
     # State information for multi-threaded server.

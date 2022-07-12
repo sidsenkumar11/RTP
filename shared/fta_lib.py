@@ -9,7 +9,7 @@ CONFIRM = "CONFIRM"
 REJECT = "REJECT "
 CHECK_LEN = len(CONFIRM)
 COMMAND_LEN = len(GET)
-CHUNK_SIZE = pow(2, 22)  # 4MB
+CHUNK_SIZE = pow(2, 27)  # 128MB
 
 
 def configure_logger(debug):

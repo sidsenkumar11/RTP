@@ -111,6 +111,11 @@ def handle_command(command, commandInput, rtpClientSocket, real):
                 commandArg = int(commandArg)
             except (ValueError, TypeError):
                 print("window command must be followed by an integer number of segments. Please try again.")
+                return
+
+            if commandArg <= 0 or commandArg >= 65535:
+                print("invalid window size, must be between 0 and 65535 exclusive.")
+                return
 
             try:
                 print(f"Setting window: {commandArg} segments")
