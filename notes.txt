@@ -1,0 +1,155 @@
+Unfortunately socket has become an overloaded term. Let's forget everything we knew and start over.
+
+---------------------------
+What is a Socket?
+---------------------------
+
+Sockets Properties
+    - A socket is an endpoint of communication to which a name can be bound (e.g. /tmp/foo or (ip, port))
+    - A socket has a type and one associated process.
+    - Sockets were designed to implement the client-server model for interprocess communication.
+
+Sockets are Files
+    - Sockets are designed to accommodate network protocols, while still behaving like UNIX files or devices whenever it makes sense.
+        - Applications create sockets when they are needed.
+        - Sockets work with the open(), close(), read(), and write() function calls
+        - The OS can differentiate between the file descriptors for files, and file descriptors for sockets.
+
+Socket Library
+    - We are most familiar with the Berkeley Socket API implemented by libsocket.so
+    - Defines several functions for creating, initializing, and interacting with sockets
+
+    - socket()
+        - Creates an unbound socket, not connected to a network. Can be used as either a client or server.
+        - Returns a Unix file descriptor to represent the socket
+        - Accepts a few parameters:
+            - family (ipv4, ipv6, unix filesystem, etc)
+            - type (tcp, udp, raw)
+            - protocol. you can ignore this
+
+
+        - Implementation:
+            - 1. Allocates memory for a socket struct. Saved in kernel memory.
+            - 2. Allocates a new inode
+            - 3. Initialize the struct and the inode, and bind them together
+            - 4. Gets a file descriptor for the inode and returns it
+
+            /**
+            *  struct socket - general BSD socket
+            *  @state: socket state (%SS_CONNECTED, etc)
+            *  @type: socket type (%SOCK_STREAM, etc)
+            *  @flags: socket flags (%SOCK_NOSPACE, etc)
+            *  @ops: protocol specific socket operations
+            *  @file: File back pointer for gc
+            *  @sk: internal networking protocol agnostic socket representation
+            *  @wq: wait queue for several uses
+            */
+            struct socket {
+                socket_state		state;
+                short			type;
+                unsigned long		flags;
+                struct socket_wq	*wq;
+                struct file		*file;
+                struct sock		*sk;
+                const struct proto_ops	*ops;
+            };
+
+
+    - bind, listen, accept, etc.
+        - Each function expects the socket file descriptor as an arg
+        - Each writes to the internal socket struct and keep track of the socket's state
+        - Internally, these do not use "sockets"; they interact with buffers from network cards via the kernel
+
+    - Many programming languages provide a light wrapper over this API.
+        - e.g. in Python, instead of the API providing functions like bind() and listen(), these are functions of the socket object
+        - The socket object is equivalent to a file descriptor
+            - You can send and recv data from it by calling "send" or "recv"
+            - If using the C API, you would have just called read() or write()
+
+TCP Sockets
+    - socket() creates an unbounded socket. While it represents an endpoint, the endpoint hasn't been defined.
+    - The socket becomes a TCP socket when bound to an IP address and port
+    - TCP Sockets only exist in the context of either a connection or listening state
+        - Corresponds to connect() or bind(). These associate the socket fd with an address & port
+
+
+    - If the TCP socket is used as a client in a connection:
+        - the port is randomly assigned by the library if not already bound
+
+    - If the TCP socket is used for server-side listening:
+        - the socket is bound to the IP and port
+        - Note: Only one listener socket allowed per address/port combination
+
+
+Listening State
+    - When a TCP socket is listening, it had to be bound to an IP address and port
+    - Listen() tells the network cards to buffer any segments destined for that address and port
+    - Accept()
+        - Waits for a SYN segment from the network card
+        - If connection pool not exhausted, creates a new connection
+        - Note: the listening socket is still listening after the connection is created
+        - There can be concurrent connections to a TCP Socket, because a connection is identified by both its local and remote endpoints
+
+
+
+Connections
+    - A connection can be thought of as a pair of TCP sockets
+    - Together, they represent both endpoints of the connection
+
+    - Confusingly: the socket API doesn't return a "connection" struct when a new connection is created
+        - connect() doesn't return anything
+        - accept() returns another socket fd. Or in Python, another socket object!
+
+        - You can get each socket in the connection's info as follows:
+
+            - int remote_sock_fd = accept(socket_fd, (struct sockaddr*)&remote_sin, &remote_sinlen);
+                - the API fills in the remote socket info into the argument remote_sin struct
+            
+            - getsockname(remote_sock_fd, (struct sockaddr*)&local_sin, &local_sinlen);
+                - if you call getsocketname() on the remote socket fd, the API fills in the local socket info
+
+    - Internally, accept() will:
+        - Creates a new socket fd or socket object
+        - When data is sent to this fd, the OS knows to add the src IP/port and dest IP/port in the segment
+        - When data is received from this fd, the OS will automatically ACK it and buffer the data for the connection
+
+------------------
+Our implementation
+------------------
+
+1. For listening sockets: we emulate the network hardware's "all-connections" receive buffer with a UDP socket
+
+Given:
+    - User process could handle multiple connections in parallel by forking after accept()
+    - UDP socket doesn't have concept of "connection" so it receives all segments sent to the listening port
+Then:
+    - Each time server UDP socket receives data, it needs to mux to the right connection
+    - Implies existence of an "all-connections" mux thread in the background per listening socket
+
+2. When mux thread receives new connection request (SYN)
+
+    - Make sure address is not already part of a connection. If it is, drop the segment since the connection thread should handle ACKs
+
+    - Create a new connection. In Python, this is a new socket object.
+    - This socket object is a connection, so it is defined by 2 IPs and ports.
+        - Source & destination
+
+    - In the socket object's constructor, spawn a new background thread for handling ACKs of received data.
+    - Also create a buffer for holding received application data
+    - Finally, have the connection thread send a SYN/ACK to the client.
+        - Wait for ACK. Timeout if no ACK comes and re-send SYN/ACK
+        - If it fails multiple times, signal the mux thread remove this connection
+
+3. When server calls send() to a connection
+    - queue the data in a buffer
+    - send it piece by piece
+    - wait for ACKs
+
+4. When connection recv()
+    - 
+
+5. When client calls connect()
+    - send SYN
+    - wait for SYN/ACK then send an ACK, then return to user
+    - timeout on SYN/ACK should raise error to user
+
