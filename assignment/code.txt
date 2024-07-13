@@ -1,0 +1,46 @@
+
+docker run --cap-add=NET_ADMIN -t -i -v /home/ssid/Desktop/RTP:/home/CS3251_Proj2/myfiles --name FTAclient gt3251/project2 /bin/bash
+
+client: 172.17.0.2
+
+docker run --cap-add=NET_ADMIN -t -i -v /home/ssid/Desktop/RTP:/home/CS3251_Proj2/myfiles --name FTAserver gt3251/project2 /bin/bash
+
+server: 172.17.0.3
+
+
+
+sudo apt-get update
+sudo apt-get install wget
+sudo apt-get install zlib1g-dev
+wget https://www.python.org/ftp/python/3.6.3/Python-3.6.3.tgz
+tar -xvf Python-3.6.3.tgz
+cd Python-3.6.3
+sudo ./configure --enable-optimizations
+sudo make -j8
+sudo make install
+
+----
+
+
+
+# drop 1%, 5%, 20% outbound packets
+tc qdisc add dev eth0 root netem loss 1
+tc qdisc replace dev eth0 root netem loss 1
+tc qdisc del dev eth0 root netem loss 1
+
+tc qdisc add dev eth0 root netem corrupt 1
+
+tc qdisc add dev eth0 root netem duplicate 1
+
+# delay outbound packets 100ms
+tc qdisc add dev eth0 root netem delay 100
+
+tc qdisc add dev eth0 root netem delay 100 reorder 1
+suod
+
+
+tc qdisc add dev eth0 root netem delay 100 reorder 90 loss 10 corrupt 10 duplicate 10 reorder 10
+
+head -c 100M </dev/urandom >myfile
+
+
